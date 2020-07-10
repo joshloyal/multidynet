@@ -4,6 +4,7 @@ import scipy.sparse as sp
 from sklearn.utils import check_array, check_random_state
 from tqdm import tqdm
 
+from .latent_space import generalized_mds
 from .omega import update_omega
 from .lds import update_latent_positions
 from .lmbdas import update_lambdas
@@ -39,7 +40,8 @@ class DynamicMultilayerNetworkLSM(object):
         ----------
         Y : array-like, shape (n_layers, n_time_steps, n_nodes, n_nodes)
         """
-        Y = check_array(Y, order='C', copy=False)
+        Y = check_array(Y, order='C', dtype=np.float64,
+                        ensure_2d=False, allow_nd=True, copy=False)
 
         n_layers, n_time_steps, n_nodes, _ = Y.shape
 
@@ -67,30 +69,55 @@ class DynamicMultilayerNetworkLSM(object):
 
         return self
 
-    def _initialize_parameters(self, Y, random_state):
+    def _initialize_parameters(self, Y, rng):
         n_layers, n_time_steps, n_nodes, _ = Y.shape
 
+        # omega is initialized by drawing from the prior?
         self.omega_ = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
-        self.X_ = np.zeros((n_time_steps, n_nodes, self.n_features))
-        self.X_sigma_ = np.zeros(
-            (n_time_steps, n_nodes, self.n_features, self.n_features))
-        self.X_cross_cov_ = np.zeros(
-            (n_time_steps - 1, n_nodes, self.n_features, self.n_features))
-        self.intercept_ = np.zeros(n_layers)
-        self.intercept_sigma_ = np.zeros(n_layers)
-        self.lambda_ = np.zeros((n_layers, self.n_features))
-        self.lambda_sigma_ = np.zeros((n_layers, self.n_features, n_features))
+        #self.X_ = np.zeros((n_time_steps, n_nodes, self.n_features))
+
+        # initialize using MDS
+        #self.X_ = generalized_mds(
+        #    Y, n_features=self.n_features, random_state=rng)
+        self.X_ = 10 * rng.randn(n_time_steps, n_nodes, self.n_features)
+
+        # intialize to prior values
+        #self.X_sigma_ = np.zeros(
+        #    (n_time_steps, n_nodes, self.n_features, self.n_features))
+        sigma_init = 10 * np.eye(self.n_features)
+
+        self.X_sigma_ = np.tile(sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
+
+        #self.X_cross_cov_ = np.zeros(
+        #    (n_time_steps - 1, n_nodes, self.n_features, self.n_features))
+        cross_init = 10 * np.eye(self.n_features)
+        self.X_cross_cov_ = np.tile(cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
+
+        # initialize intercept based on edge densities?
+        self.intercept_ = (
+            Y.sum(axis=(1, 2, 3)) / (0.5 * n_nodes * (n_nodes - 1)))
+        self.intercept_sigma_ = self.intercept_var_prior * np.ones(n_layers)
+
+        # intialize to prior means
+        #self.lambda_ = np.zeros((n_layers, self.n_features))
+        self.lambda_ = np.sqrt(self.lambda_var_prior) * rng.randn(n_layers, self.n_features)
+        self.lambda_sigma_ = self.lambda_var_prior * np.ones(
+            (n_layers, self.n_features, self.n_features))
+
+        # initialize based on prior information
         self.a_tau_sq_ = self.a + n_nodes
+        self.b_tau_sq_ = self.b
         self.c_sigma_sq_ = self.c + n_nodes * (n_time_steps - 1)
+        self.d_sigma_sq_ = self.d
 
     def _estimate_omegas(self, Y):
-        update_omega(self.omegas_, self.X_, self.X_sigma_, self.intercept_,
+        update_omega(self.omega_, self.X_, self.X_sigma_, self.intercept_,
                      self.intercept_sigma_, self.lambda_, self.lambda_sigma_)
 
     def _estimate_latent_positions(self, Y):
         update_latent_positions(
             Y, self.X_, self.X_sigma_, self.X_cross_cov_,
-            self.lambda_, self.lambda_sigma_, self.intercept_, self.omegas_,
+            self.lambda_, self.lambda_sigma_, self.intercept_, self.omega_,
             self.a_tau_sq_ / self.b_tau_sq_,
             self.c_sigma_sq_ / self.d_sigma_sq_)
 
@@ -110,6 +137,8 @@ class DynamicMultilayerNetworkLSM(object):
             (self.X_[0] ** 2).sum())
 
     def _estimate_sigma_sq(self, Y):
+        n_time_steps = Y.shape[1]
+
         self.d_sigma_sq_ = self.d
         for t in range(1, n_time_steps):
             self.d_sigma_sq_ += np.trace(
@@ -122,4 +151,4 @@ class DynamicMultilayerNetworkLSM(object):
 
             self.d_sigma_sq_ -= 2 * np.trace(
                 self.X_cross_cov_[t-1], axis1=1, axis2=2).sum()
-            self.d_sigma_sq_ -= 2 * (self.X[t-1] * self.X[t]).sum()
+            self.d_sigma_sq_ -= 2 * (self.X_[t-1] * self.X_[t]).sum()
