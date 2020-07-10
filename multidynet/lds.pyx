@@ -119,10 +119,11 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
     # run the filter for the forward message variables
     mu, sigma, sigma_inv, sigma_star = kalman_filter(A, B, tau_prec, sigma_prec)
 
-    # run the smoother for the backward message variables
+    # run the smoother
     mean[n_time_steps - 1] = mu[n_time_steps - 1]
     cov[n_time_steps - 1] = sigma[n_time_steps - 1]
     for t in range(n_time_steps - 1, 0, -1):
+        # calculate backwards message variables
         psi_star[t] = np.linalg.pinv(F_inv + B[t] + psi_inv[t])
         psi_inv[t-1] = F_inv - (sigma_prec ** 2) * psi_star[t]
         psi[t-1] = np.linalg.pinv(psi_inv[t-1])
@@ -159,5 +160,6 @@ def update_latent_positions(double[:, :, :, ::1] Y,
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
             Y, X, X_sigma, lmbda, lmbda_sigma, intercept, omega, i)
+
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, sigma_prec, tau_prec)
