@@ -6,8 +6,6 @@
 # cython: nonecheck=False
 # cython: initializedcheck=False
 
-from libc.math cimport exp
-
 import numpy as np
 cimport numpy as np
 
@@ -17,7 +15,7 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:, ::1] lmbda,
                                  double[:, :, ::1] lmbda_sigma,
-                                 double[::1] beta,
+                                 double[::1] intercept,
                                  double[:, :, :, ::1] omega,
                                  int i):
     cdef size_t t, k, j, p, q
@@ -39,7 +37,7 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
                         Gamma1[t, p] += (
                             lmbda[k, p] * X[t, j, p] * (
                                 Y[k, t, i, j] - 0.5 -
-                                    omega[k, t, i, j] * beta[k]))
+                                    omega[k, t, i, j] * intercept[k]))
 
                         for q in range(n_features):
                             Gamma2[t, p, q] += omega[k, t, i, j] * (
@@ -58,6 +56,8 @@ def kalman_filter(np.ndarray[double, ndim=2, mode='c'] A,
     cdef size_t t
     cdef size_t n_time_steps = A.shape[0]
     cdef size_t n_features = A.shape[1]
+
+    # allocate temporary arrays
     cdef np.ndarray[double, ndim=2, mode='c'] mu = np.zeros(
         (n_time_steps, n_features))
     cdef np.ndarray[double, ndim=3, mode='c'] sigma = np.zeros(
@@ -94,6 +94,8 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
     cdef size_t t
     cdef size_t n_time_steps = A.shape[0]
     cdef size_t n_features = A.shape[1]
+
+    # Allocate temporary arrays
     cdef np.ndarray[double, ndim=2, mode='c'] mu
     cdef np.ndarray[double, ndim=3, mode='c'] sigma
     cdef np.ndarray[double, ndim=3, mode='c'] sigma_star
@@ -117,6 +119,7 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
     # run the filter for the forward message variables
     mu, sigma, sigma_inv, sigma_star = kalman_filter(A, B, tau_prec, sigma_prec)
 
+    # run the smoother for the backward message variables
     mean[n_time_steps - 1] = mu[n_time_steps - 1]
     cov[n_time_steps - 1] = sigma[n_time_steps - 1]
     for t in range(n_time_steps - 1, 0, -1):
@@ -144,7 +147,7 @@ def update_latent_positions(double[:, :, :, ::1] Y,
                             np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] lmbda_sigma,
-                            double[::1] beta,
+                            double[::1] intercept,
                             double[:, :, :, ::1] omega,
                             double sigma_prec,
                             double tau_prec):
@@ -155,6 +158,6 @@ def update_latent_positions(double[:, :, :, ::1] Y,
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
-            Y, X, X_sigma, lmbda, lmbda_sigma, beta, omega, i)
+            Y, X, X_sigma, lmbda, lmbda_sigma, intercept, omega, i)
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, sigma_prec, tau_prec)

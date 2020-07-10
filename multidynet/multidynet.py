@@ -46,19 +46,19 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_sigma_ = np.zeros((n_time_steps, n_nodes, self.n_features, self.n_features))
         self.X_cross_cov_ = np.zeros(
             (n_time_steps - 1, n_nodes, self.n_features, self.n_features))
-        self.beta_ = np.zeros(n_layers)
-        self.beta_sigma_ = np.zeros(n_layers)
+        self.intercept_ = np.zeros(n_layers)
+        self.intercept_sigma_ = np.zeros(n_layers)
         self.lambda_ = np.zeros((n_layers, self.n_features))
         self.lambda_sigma_ = np.zeros((n_layers, self.n_features, n_features))
 
     def _estimate_omegas(self, Y):
-        update_omega(self.omegas_, self.X_, self.X_sigma_, self.beta_,
-                     self.beta_sigma_, self.lambda_, self.lambda_sigma_)
+        update_omega(self.omegas_, self.X_, self.X_sigma_, self.intercept_,
+                     self.intercept_sigma_, self.lambda_, self.lambda_sigma_)
 
     def _estimate_latent_positions(self, Y):
         update_latent_positions(
             Y, self.X_, self.X_sigma_, self.X_cross_cov_,
-            self.lambda_, self.lambda_sigma_, self.beta_, self.omegas_,
+            self.lambda_, self.lambda_sigma_, self.intercept_, self.omegas_,
             self.a / self.b, self.c / self.d)
 
     def _estimate_lambdas(self):

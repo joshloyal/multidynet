@@ -46,8 +46,8 @@ cdef double update_omega_single(double mu_bk,
 cpdef void update_omega(double[:, :, :, ::1] omega,
                         double[:, :, ::1] X,
                         double[:, :, :, ::1] X_sigma,
-                        double[::1] beta,
-                        double[::1] beta_sigma,
+                        double[::1] intercept,
+                        double[::1] intercept_sigma,
                         double[:, ::1] lmbda,
                         double[:, :, ::1] lmbda_sigma) nogil:
     cdef size_t n_layers = omega.shape[0]
@@ -60,7 +60,8 @@ cpdef void update_omega(double[:, :, :, ::1] omega,
             for i in range(n_nodes):
                 for j in range(i):
                     omega[k, t, i, j] = update_omega_single(
-                        beta[k], beta_sigma[k], X[t, i], X_sigma[t, i],
-                        X[t, j], X_sigma[t, j], lmbda[k], lmbda_sigma[k])
+                        intercept[k], intercept_sigma[k], X[t, i],
+                        X_sigma[t, i], X[t, j], X_sigma[t, j], lmbda[k],
+                        lmbda_sigma[k])
 
                     omega[k, t, j, i] = omega[k, t, i, j]

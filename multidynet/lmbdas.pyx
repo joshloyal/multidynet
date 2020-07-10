@@ -6,8 +6,6 @@
 # cython: nonecheck=False
 # cython: initializedcheck=False
 
-from libc.math cimport exp, sqrt, tanh
-
 import numpy as np
 cimport numpy as np
 
@@ -15,7 +13,7 @@ cimport numpy as np
 def calculate_natural_parameters(double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
-                                 double[:] beta,
+                                 double[:] intercept,
                                  double[:, :, :, ::1] omega,
                                  double lmbda_var_prior,
                                  int k):
@@ -34,7 +32,7 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
 
                 for p in range(n_features):
                     eta1[p] += (
-                        (Y[k, t, i, j] - 0.5 - omega[k, t, i, j] * beta[k]) *
+                        (Y[k, t, i, j] - 0.5 - omega[k, t, i, j] * intercept[k]) *
                             X[t, i, p] * X[t, j, p])
 
                     for q in range(n_features):
@@ -50,17 +48,19 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
 def update_lambdas(double[:, :, :, ::1] Y,
                    double[:, :, ::1] X,
                    double[:, :, :, ::1] X_sigma,
-                   double[:] beta,
+                   double[:] intercept,
                    np.ndarray[double, ndim=2, mode='c'] lmbda,
                    np.ndarray[double, ndim=3, mode='c'] lmbda_sigma,
                    double[:, :, :, ::1] omega,
                    double lmbda_var_prior):
     cdef size_t k
     cdef size_t n_layers = Y.shape[0]
+    cdef np.ndarray[double, ndim=1, mode='c'] eta1
+    cdef np.ndarray[double, ndim=2, mode='c'] eta2
 
     for k in range(n_layers):
         eta1, eta2 = calculate_natural_parameters(
-            Y, X, X_sigma, beta, omega, lmbda_var_prior, k)
+            Y, X, X_sigma, intercept, omega, lmbda_var_prior, k)
 
         lmbda_sigma[k] = np.linalg.pinv(eta2)
         lmbda[k] = np.dot(lmbda_sigma[k], eta1)
