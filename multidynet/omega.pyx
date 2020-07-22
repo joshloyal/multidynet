@@ -6,41 +6,41 @@
 # cython: nonecheck=False
 # cython: initializedcheck=False
 
-from libc.math cimport exp, sqrt, tanh
+from libc.math cimport exp, sqrt, tanh, pow
 
 import numpy as np
 cimport numpy as np
 
 
-cdef double update_omega_single(double mu_bk,
-                                double sigma_bk,
-                                double[::1] mu_it,
-                                double[:, ::1] sigma_it,
-                                double[::1] mu_jt,
-                                double[:, ::1] sigma_jt,
-                                double[::1] mu_lk,
-                                double[:, ::1] sigma_lk) nogil:
+cdef double update_omega_single(double interceptk,
+                                double interceptk_sigma,
+                                double[::1] Xit,
+                                double[:, ::1] Xit_sigma,
+                                double[::1] Xjt,
+                                double[:, ::1] Xjt_sigma,
+                                double[::1] lmbdak,
+                                double[:, ::1] lmbdak_sigma) nogil:
     cdef double c_omega = 0.
-    cdef double mu_omega = 0.
-    cdef size_t n_features = mu_it.shape[0]
+    cdef double omega = 0.
+    cdef size_t n_features = Xit.shape[0]
     cdef int p, q = 0
 
     # calculate the natural parameter
-    c_omega += sigma_bk + mu_bk ** 2
+    c_omega += interceptk_sigma + interceptk ** 2
     for p in range(n_features):
-        c_omega += 2 * mu_bk * mu_lk[p] * mu_it[p] * mu_jt[p]
+        c_omega += 2 * interceptk * lmbdak[p] * Xit[p] * Xjt[p]
 
         for q in range(n_features):
-            c_omega += ((sigma_lk[p, q] + mu_lk[p] * mu_lk[q]) *
-                        (sigma_it[p, q] + mu_it[p] * mu_it[q]) *
-                        (sigma_jt[p, q] + mu_jt[p] * mu_jt[q]))
+            c_omega += ((lmbdak_sigma[p, q] + lmbdak[p] * lmbdak[q]) *
+                        (Xit_sigma[p, q] + Xit[p] * Xit[q]) *
+                        (Xjt_sigma[p, q] + Xjt[p] * Xjt[q]))
 
     # calculate mean of a PG(1, sqrt(c_omega)) random variable
     c_omega = sqrt(c_omega)
-    mu_omega = tanh(0.5 * c_omega)
-    mu_omega /= (2. * c_omega)
+    omega = tanh(0.5 * c_omega)
+    omega /= (2. * c_omega)
 
-    return mu_omega
+    return omega
 
 
 cpdef void update_omega(double[:, :, :, ::1] omega,

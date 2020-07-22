@@ -1,26 +1,57 @@
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import seaborn as sns
+
+from matplotlib.colors import ListedColormap
+from dynetlsm.plots import get_colors
 
 
-__all__ = ['plot_network']
+__all__ = ['plot_network', 'plot_network_communities']
 
 
-def plot_network(Y, X, normalize=True, figsize=(8, 6), node_color='tomato',
-                 alpha=1.0, size=100, edge_width=0.25):
+def plot_network(Y, X, normalize=True, figsize=(8, 6), node_color='orangered',
+                 alpha=1.0, size=300, edge_width=0.25, with_labels=False):
     fig, ax = plt.subplots(figsize=figsize)
 
+    r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
     if normalize:
-        r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
         X = X / r
-        sizes = size * (r / np.min(r))
-    else:
-        sizes = size
 
+    cmap = ListedColormap(
+        sns.light_palette(node_color, n_colors=np.unique(r).shape[0]))
+    G = nx.from_numpy_array(Y)
+    nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
+                     node_color=r.ravel() / r.min(),
+                     node_size=size,
+                     alpha=alpha,
+                     cmap=cmap,
+                     with_labels=with_labels,
+                     ax=ax)
+    ax.collections[0].set_edgecolor('white')
+    ax.axis('equal')
+    ax.axis('off')
+
+    return ax
+
+
+def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
+                             alpha=1.0, size=300, edge_width=0.25,
+                             with_labels=False):
+    fig, ax = plt.subplots(figsize=figsize)
+
+    r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
+    if normalize:
+        X = X / r
+
+    colors = get_colors(z.ravel())
 
     G = nx.from_numpy_array(Y)
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
-                     node_color=node_color, node_size=sizes, alpha=alpha,
+                     node_color=colors[z],
+                     node_size=size,
+                     alpha=alpha,
+                     with_labels=with_labels,
                      ax=ax)
     ax.collections[0].set_edgecolor('white')
     ax.axis('equal')

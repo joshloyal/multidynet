@@ -22,10 +22,11 @@ def calculate_natural_parameters(np.ndarray[double, ndim=4, mode='c'] Y,
     cdef double eta1 = 0.
     cdef double eta2 = 0.
 
-    eta1 = np.sum(omega[k]) + (1. / intercept_var_prior)
+    # divide by 2 since we only need the lower half of the matrix
+    eta2 = 0.5 * np.sum(omega[k]) + (1. / intercept_var_prior)
     for t in range(n_time_steps):
-        tmp = Y[k, t] - 1/2. - omega[k, t] * np.dot(X[t] * lmbda[k], X[t].T)
-        eta2 += tmp[np.tril_indices_from(tmp, k=-1)].sum()
+        tmp = Y[k, t] - 0.5 - omega[k, t] * np.dot(X[t] * lmbda[k], X[t].T)
+        eta1 += tmp[np.tril_indices_from(tmp, k=-1)].sum()
 
     return eta1, eta2
 
@@ -46,5 +47,5 @@ def update_intercepts(np.ndarray[double, ndim=4, mode='c'] Y,
         eta1, eta2 = calculate_natural_parameters(
             Y, X, lmbda, omega, intercept_var_prior, k)
 
-        intercept_sigma[k] = 1. / eta1
-        intercept[k] = intercept_sigma[k] * eta2
+        intercept_sigma[k] = 1. / eta2
+        intercept[k] = intercept_sigma[k] * eta1

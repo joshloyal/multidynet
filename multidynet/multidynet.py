@@ -1,6 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
 
+from scipy.special import logit, gammainc
 from sklearn.utils import check_array, check_random_state
 from tqdm import tqdm
 
@@ -9,20 +10,22 @@ from .omega import update_omega
 from .lds import update_latent_positions
 from .lmbdas import update_lambdas
 from .intercepts import update_intercepts
+from .log_likelihood import log_likelihood
 
 
 __all__ = ['DynamicMultilayerNetworkLSM']
 
 
-def _intialize_latent_positions(Y):
-    pass
-
 
 class DynamicMultilayerNetworkLSM(object):
-    def __init__(self, n_features=2, lambda_var_prior=4, intercept_var_prior=4,
-                 a=4, b=4, c=4, d=4, n_init=1, max_iter=100, warm_start=False,
-                 random_state=42):
+    def __init__(self, n_features=2,
+                 lambda_odds_prior=2,
+                 lambda_var_prior=4, intercept_var_prior=4,
+                 a=0.1, b=0.1, c=0.1, d=0.1,
+                 n_init=1, max_iter=100,
+                 warm_start=False, random_state=42):
         self.n_features = n_features
+        self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.intercept_var_prior = intercept_var_prior
         self.a = a
@@ -33,6 +36,7 @@ class DynamicMultilayerNetworkLSM(object):
         self.max_iter = max_iter
         self.warm_start = warm_start
         self.random_state = random_state
+        self.X_ref_ = None
 
     def fit(self, Y):
         """
@@ -59,6 +63,11 @@ class DynamicMultilayerNetworkLSM(object):
             self._estimate_tau_sq(Y)
             self._estimate_sigma_sq(Y)
 
+            self.logp_[n_iter] = self.logp(Y)
+
+            #if self.X_ref_ is not None:
+            #    self._scale_space()
+
             # check convergence
             #if abs(change) < self.tol:
             #    self.converged_ = True
@@ -74,41 +83,56 @@ class DynamicMultilayerNetworkLSM(object):
 
         # omega is initialized by drawing from the prior?
         self.omega_ = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
-        #self.X_ = np.zeros((n_time_steps, n_nodes, self.n_features))
 
         # initialize using MDS
         #self.X_ = generalized_mds(
         #    Y, n_features=self.n_features, random_state=rng)
-        self.X_ = 10 * rng.randn(n_time_steps, n_nodes, self.n_features)
+        #self.X_ = np.zeros((n_time_steps, n_nodes, self.n_features))
+        #evals, evecs = np.linalg.eigh(Y[0, 0])
+        #self.X_[0] = evecs[:, ::-1][:, :self.n_features] * np.sqrt(evals[::-1][:self.n_features])
+        ###self.X_[0] = rng.randn(n_nodes, self.n_features)
+        #for t in range(1, n_time_steps):
+        #    #self.X_[t] = self.X_[t-1] + np.sqrt(self.k) * rng.randn(n_nodes, self.n_features)
+        #    self.X_[t] = self.X_[0].copy()
+        self.X_ = rng.randn(n_time_steps, n_nodes, self.n_features)
 
         # intialize to prior values
         #self.X_sigma_ = np.zeros(
         #    (n_time_steps, n_nodes, self.n_features, self.n_features))
-        sigma_init = 10 * np.eye(self.n_features)
-
-        self.X_sigma_ = np.tile(sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
+        sigma_init = 5 * np.ones((self.n_features, self.n_features))
+        #sigma_init = np.eye(self.n_features)
+        self.X_sigma_ = np.tile(
+            sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
 
         #self.X_cross_cov_ = np.zeros(
         #    (n_time_steps - 1, n_nodes, self.n_features, self.n_features))
-        cross_init = 10 * np.eye(self.n_features)
-        self.X_cross_cov_ = np.tile(cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
+        cross_init = 5 * np.ones((self.n_features, self.n_features))
+        #cross_init = np.eye(self.n_features)
+        self.X_cross_cov_ = np.tile(
+            cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
         # initialize intercept based on edge densities?
-        self.intercept_ = (
-            Y.sum(axis=(1, 2, 3)) / (0.5 * n_nodes * (n_nodes - 1)))
+        self.intercept_ = logit(Y.mean(axis=(1, 2, 3)))
         self.intercept_sigma_ = self.intercept_var_prior * np.ones(n_layers)
 
         # intialize to prior means
-        #self.lambda_ = np.zeros((n_layers, self.n_features))
-        self.lambda_ = np.sqrt(self.lambda_var_prior) * rng.randn(n_layers, self.n_features)
+        self.lambda_ = np.sqrt(2) * rng.randn(n_layers, self.n_features)
+        self.lambda_[0] = (
+            2 * (self.lambda_odds_prior / (1. + self.lambda_odds_prior)) - 1)
         self.lambda_sigma_ = self.lambda_var_prior * np.ones(
             (n_layers, self.n_features, self.n_features))
+        self.lambda_sigma_[0] = (
+            (1 - self.lambda_[0, 0] ** 2) * np.eye(self.n_features))
+        self.lambda_logit_prior_ = np.log(self.lambda_odds_prior)
 
         # initialize based on prior information
-        self.a_tau_sq_ = self.a + n_nodes
+        self.a_tau_sq_ = self.a
         self.b_tau_sq_ = self.b
-        self.c_sigma_sq_ = self.c + n_nodes * (n_time_steps - 1)
+        self.c_sigma_sq_ = self.c
         self.d_sigma_sq_ = self.d
+
+        self.logp_ = np.zeros(self.max_iter + 1)
+        self.logp_[0] = self.logp(Y)
 
     def _estimate_omegas(self, Y):
         update_omega(self.omega_, self.X_, self.X_sigma_, self.intercept_,
@@ -124,7 +148,14 @@ class DynamicMultilayerNetworkLSM(object):
     def _estimate_lambdas(self, Y):
         update_lambdas(
             Y, self.X_, self.X_sigma_, self.intercept_, self.lambda_,
-            self.lambda_sigma_, self.omega_, self.lambda_var_prior)
+            self.lambda_sigma_, self.omega_, self.lambda_var_prior,
+            self.lambda_logit_prior_)
+
+        # set first component of lambda to all ones
+        #self.lambda_ /= self.lambda_[0]
+        #D = np.diag(1./self.lambda_[0])
+        #for k in range(Y.shape[0]):
+        #    self.lambda_sigma_[k] = D @ self.lambda_sigma_[k] @ D
 
     def _estimate_intercepts(self, Y):
         update_intercepts(
@@ -132,13 +163,19 @@ class DynamicMultilayerNetworkLSM(object):
             self.lambda_, self.omega_, self.intercept_var_prior)
 
     def _estimate_tau_sq(self, Y):
+        n_nodes = Y.shape[2]
+
+        self.a_tau_sq_ = self.a + n_nodes * self.n_features
         self.b_tau_sq_ = (self.b +
             np.trace(self.X_sigma_[0], axis1=1, axis2=2).sum() +
             (self.X_[0] ** 2).sum())
 
     def _estimate_sigma_sq(self, Y):
         n_time_steps = Y.shape[1]
+        n_nodes = Y.shape[2]
 
+        self.c_sigma_sq_ = (self.c +
+            n_nodes * (n_time_steps - 1) * self.n_features)
         self.d_sigma_sq_ = self.d
         for t in range(1, n_time_steps):
             self.d_sigma_sq_ += np.trace(
@@ -152,3 +189,10 @@ class DynamicMultilayerNetworkLSM(object):
             self.d_sigma_sq_ -= 2 * np.trace(
                 self.X_cross_cov_[t-1], axis1=1, axis2=2).sum()
             self.d_sigma_sq_ -= 2 * (self.X_[t-1] * self.X_[t]).sum()
+
+        #self.k_mean_ = self.c_sigma_sq_ / self.d_sigma_sq_
+        #self.k_mean_ *= ((1 - gammainc(self.c_sigma_sq_ + 1, self.d_sigma_sq_)) /
+        #                    (1 - gammainc(self.c_sigma_sq_, self.d_sigma_sq_)))
+
+    def logp(self, Y):
+        return log_likelihood(Y, self.X_, self.lambda_, self.intercept_)
