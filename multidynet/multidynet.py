@@ -4,9 +4,10 @@ import numpy as np
 import scipy.sparse as sp
 
 from joblib import Parallel, delayed
-from scipy.special import logit, gammainc
-from sklearn.utils import check_array, check_random_state
+from scipy.special import logit, gammainc, expit
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.metrics import roc_auc_score
+from sklearn.utils import check_array, check_random_state
 from tqdm import tqdm
 
 from .latent_space import generalized_mds
@@ -96,7 +97,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  intercept_var_prior, a, b, c, d,
+                  intercept_var_prior, tau_sq, sigma_sq, a, b, c, d,
                   max_iter, tol, random_state, verbose=True):
 
     # convergence criteria (Eq{L(Y | theta)})
@@ -118,11 +119,16 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.intercept_sigma_, model.lambda_, model.lambda_sigma_)
 
         # latent trajectory updates
+        tau_sq_prec = (
+            model.a_tau_sq_ / model.b_tau_sq_ if tau_sq == 'auto' else 1. / tau_sq)
+        sigma_sq_prec = (
+            model.c_sigma_sq_ / model.d_sigma_sq_ if sigma_sq == 'auto' else 1. / sigma_sq)
+
+
         update_latent_positions(
             Y, model.X_, model.X_sigma_, model.X_cross_cov_,
             model.lambda_, model.lambda_sigma_, model.intercept_, model.omega_,
-            model.a_tau_sq_ / model.b_tau_sq_,
-            model.c_sigma_sq_ / model.d_sigma_sq_)
+            tau_sq_prec, sigma_sq_prec)
 
         # update lambda values
         update_lambdas(
@@ -136,12 +142,14 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.lambda_, model.omega_, intercept_var_prior)
 
         # update intial variance of the latent space
-        model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
-            Y, model.X_, model.X_sigma_, a, b)
+        if tau_sq == 'auto':
+            model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
+                Y, model.X_, model.X_sigma_, a, b)
 
         # update step sizes
-        model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
-            Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
+        if sigma_sq == 'auto':
+            model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
+                Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
 
         model.logp_.append(loglik)
 
@@ -155,10 +163,38 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     return model
 
 
+def calculate_probabilities(Y, X, lmbda, intercept):
+    n_layers, n_time_steps, n_nodes, _ = Y.shape
+
+    probas = np.zeros_like(Y)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            eta = intercept[k] + np.dot(X[t] * lmbda[k], X[t].T)
+            probas[k, t] = expit(eta)
+
+    return probas
+
+
+def calculate_auc(Y_true, Y_pred):
+    n_layers, n_time_steps, n_nodes, _ = Y_true.shape
+    indices = np.tril_indices_from(Y_true[0, 0], k=-1)
+    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+
+    y_true = np.zeros((n_layers, n_time_steps, n_dyads))
+    y_pred = np.zeros((n_layers, n_time_steps, n_dyads))
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            y_true[k, t] = Y_true[k, t][indices]
+            y_pred[k, t] = Y_pred[k, t][indices]
+
+    return roc_auc_score(y_true.ravel(), y_pred.ravel())
+
+
 class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4, intercept_var_prior=4,
+                 tau_sq='auto', sigma_sq='auto',
                  a=4.0, b=8.0, c=10, d=0.1,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
@@ -166,6 +202,8 @@ class DynamicMultilayerNetworkLSM(object):
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.intercept_var_prior = intercept_var_prior
+        self.tau_sq = tau_sq
+        self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
@@ -222,14 +260,9 @@ class DynamicMultilayerNetworkLSM(object):
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features, self.lambda_odds_prior,
                 self.lambda_var_prior, self.intercept_var_prior,
-                self.a, self.b, self.c, self.d,
+                self.tau_sq, self.sigma_sq, self.a, self.b, self.c, self.d,
                 self.max_iter, self.tol, seed, verbose=verbose)
             for seed in seeds)
-
-        #model = optimize_elbo(
-        #    Y, self.n_features, self.lambda_odds_prior, self.lambda_var_prior,
-        #    self.intercept_var_prior, self.a, self.b, self.c, self.d,
-        #    self.max_iter, self.tol, self.random_state, verbose=True)
 
         # choose model with the largest convergence criteria
         best_model = models[0]
@@ -245,6 +278,13 @@ class DynamicMultilayerNetworkLSM(object):
                           'or check for degenerate data.', ConvergenceWarning)
 
         self._set_parameters(best_model)
+
+        # calculate dyad-probabilities
+        self.probas_ = calculate_probabilities(
+            Y, self.X_, self.lambda_, self.intercept_)
+
+        # calculate in-sample AUC
+        self.auc_ = calculate_auc(Y, self.probas_)
 
         return self
 
