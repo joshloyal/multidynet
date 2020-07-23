@@ -32,7 +32,7 @@ cpdef double log_likelihood(double[:, :, :, ::1] Y,
                     eta = intercept[k]
                     for p in range(n_features):
                         eta += lmbda[k, p] * X[t, i, p] * X[t, j, p]
-                    loglik += eta - log(1 + exp(eta))
+                    loglik += Y[k, t, i, j] * eta - log(1 + exp(eta))
 
     return loglik
 
