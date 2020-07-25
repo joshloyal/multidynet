@@ -17,6 +17,7 @@ from .lmbdas import update_lambdas
 from .intercepts import update_intercepts
 from .variances import update_tau_sq, update_sigma_sq
 from .log_likelihood import log_likelihood
+from .metrics import calculate_auc
 
 
 __all__ = ['DynamicMultilayerNetworkLSM']
@@ -68,7 +69,14 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
     # initialize intercept based on edge density
-    intercept = logit(Y.mean(axis=(1, 2, 3)))
+    intercept = np.zeros(n_layers)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
+            intercept[k] += Y_vec[Y_vec != -1.0].mean()
+        intercept[k] /= n_time_steps
+
+    intercept = logit(intercept)
     intercept_sigma = intercept_var_prior * np.ones(n_layers)
 
     # intialize to prior means
@@ -173,21 +181,6 @@ def calculate_probabilities(Y, X, lmbda, intercept):
             probas[k, t] = expit(eta)
 
     return probas
-
-
-def calculate_auc(Y_true, Y_pred):
-    n_layers, n_time_steps, n_nodes, _ = Y_true.shape
-    indices = np.tril_indices_from(Y_true[0, 0], k=-1)
-    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
-
-    y_true = np.zeros((n_layers, n_time_steps, n_dyads))
-    y_pred = np.zeros((n_layers, n_time_steps, n_dyads))
-    for k in range(n_layers):
-        for t in range(n_time_steps):
-            y_true[k, t] = Y_true[k, t][indices]
-            y_pred[k, t] = Y_pred[k, t][indices]
-
-    return roc_auc_score(y_true.ravel(), y_pred.ravel())
 
 
 class DynamicMultilayerNetworkLSM(object):
@@ -296,11 +289,15 @@ class DynamicMultilayerNetworkLSM(object):
         self.intercept_ = model.intercept_
         self.intercept_sigma_ = model.intercept_sigma_
         self.lambda_ = model.lambda_
+        self.lambda_[0] = np.sign(model.lambda_[0])
+        self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
         self.lambda_sigma_ = model.lambda_sigma_
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
+        self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
         self.c_sigma_sq_ = model.c_sigma_sq_
         self.d_sigma_sq_ = model.d_sigma_sq_
+        self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
         self.logp_ = model.logp_
 
     def _initialize_parameters(self, Y, rng):

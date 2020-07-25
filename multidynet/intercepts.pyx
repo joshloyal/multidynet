@@ -23,10 +23,15 @@ def calculate_natural_parameters(np.ndarray[double, ndim=4, mode='c'] Y,
     cdef double eta2 = 0.
 
     # divide by 2 since we only need the lower half of the matrix
+    # NOTE: do not screen missing values since omega is zero anyway
     eta2 = 0.5 * np.sum(omega[k]) + (1. / intercept_var_prior)
     for t in range(n_time_steps):
         tmp = Y[k, t] - 0.5 - omega[k, t] * np.dot(X[t] * lmbda[k], X[t].T)
-        eta1 += tmp[np.tril_indices_from(tmp, k=-1)].sum()
+
+        # screen for missing values
+        tril_indices = np.tril_indices_from(tmp, k=-1)
+        indices = np.where(Y[k, t][tril_indices] != -1.0)
+        eta1 += tmp[np.tril_indices_from(tmp, k=-1)][indices].sum()
 
     return eta1, eta2
 

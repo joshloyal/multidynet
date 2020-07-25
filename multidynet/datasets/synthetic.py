@@ -60,6 +60,7 @@ def network_from_dynamic_latent_space(X, intercept, random_state=None):
 def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
                                       n_features=2, tau_sq=1.0, sigma_sq=1.0,
                                       lmbda_scale=1.0,
+                                      lmbda=None,
                                       intercept=1.0,
                                       assortative_reference=True,
                                       random_state=42):
@@ -72,19 +73,19 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
         X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
 
     # assortative and dissassortative layers
-    n_layers = 4
-    lmbda = np.zeros((n_layers, n_features))
+    if lmbda is None:
+        n_layers = 4
+        lmbda = np.zeros((n_layers, n_features))
 
-    if assortative_reference:
-        lmbda[0] = np.array([1., 1.])
+        if assortative_reference:
+            lmbda[0] = np.array([1., 1.])
+        else:
+            lmbda[0] = -np.array([1., 1.])
+        lmbda[1] = lmbda_scale * lmbda[0]
+        lmbda[2] = -lmbda_scale * lmbda[0]
+        lmbda[3] = -lmbda[0]
     else:
-        lmbda[0] = -np.array([1., 1.])
-    lmbda[1] = lmbda_scale * lmbda[0]
-    lmbda[2] = -lmbda_scale * lmbda[0]
-    lmbda[3] = -lmbda[0]
-    #lmbda[0] = np.array([0.25, 0.25])
-    #lmbda[1] = np.array([1.0, 1.0])
-    #lmbda[2] = -np.array([1.0, 1.0])
+        n_layers = lmbda.shape[0]
 
     if not isinstance(intercept, np.ndarray):
         intercept = np.repeat(intercept, n_layers)

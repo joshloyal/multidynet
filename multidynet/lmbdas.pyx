@@ -13,7 +13,7 @@ import numpy as np
 cimport numpy as np
 
 
-def calculate_natural_parameters_reference(double[:, :, :, ::1] Y,
+def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
                                            double[:, :, ::1] X,
                                            double[:, :, :, ::1] X_sigma,
                                            double[:] intercept,
@@ -29,21 +29,22 @@ def calculate_natural_parameters_reference(double[:, :, :, ::1] Y,
     for t in range(n_time_steps):
         for i in range(n_nodes):
             for j in range(i):
-                eta += (
-                    (Y[0, t, i, j] - 0.5 - omega[0, t, i, j] * intercept[0]) *
-                        X[t, i, p] * X[t, j, p])
+                if Y[0, t, i, j] != -1.0:
+                    eta += (
+                        (Y[0, t, i, j] - 0.5 - omega[0, t, i, j] * intercept[0]) *
+                            X[t, i, p] * X[t, j, p])
 
-                for q in range(n_features):
-                    if q != p:
-                        eta -= omega[0, t, i, j] * lmbda[q] * (
-                            (X_sigma[t, i, q, p] + X[t, i, q] * X[t, i, p]) *
-                            (X_sigma[t, j, q, p] + X[t, j, q] * X[t, j, p]))
+                    for q in range(n_features):
+                        if q != p:
+                            eta -= omega[0, t, i, j] * lmbda[q] * (
+                                (X_sigma[t, i, q, p] + X[t, i, q] * X[t, i, p]) *
+                                (X_sigma[t, j, q, p] + X[t, j, q] * X[t, j, p]))
 
 
     return 2 * eta
 
 
-def calculate_natural_parameters(double[:, :, :, ::1] Y,
+def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:] intercept,
@@ -62,23 +63,25 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
     for t in range(n_time_steps):
         for i in range(n_nodes):
             for j in range(i):
-                for p in range(n_features):
-                    eta1[p] += (
-                        (Y[k, t, i, j] - 0.5 - omega[k, t, i, j] * intercept[k]) *
+                if Y[k, t, i, j] != -1.0:
+                    for p in range(n_features):
+                        eta1[p] += (
+                            (Y[k, t, i, j] - 0.5 -
+                                omega[k, t, i, j] * intercept[k]) *
                             X[t, i, p] * X[t, j, p])
 
-                    for q in range(p + 1):
-                        eta2[p, q] += omega[k, t, i, j] * (
-                            (X_sigma[t, i, p, q] + X[t, i, p] * X[t, i, q]) *
-                            (X_sigma[t, j, p, q] + X[t, j, p] * X[t, j, q]))
-                        eta2[q, p] = eta2[p, q]
+                        for q in range(p + 1):
+                            eta2[p, q] += omega[k, t, i, j] * (
+                                (X_sigma[t, i, p, q] + X[t, i, p] * X[t, i, q]) *
+                                (X_sigma[t, j, p, q] + X[t, j, p] * X[t, j, q]))
+                            eta2[q, p] = eta2[p, q]
 
     eta2[np.diag_indices_from(eta2)] += (1. / lmbda_var_prior)
 
     return eta1, eta2
 
 
-def update_lambdas(double[:, :, :, ::1] Y,
+def update_lambdas(const double[:, :, :, ::1] Y,
                    double[:, :, ::1] X,
                    double[:, :, :, ::1] X_sigma,
                    double[:] intercept,

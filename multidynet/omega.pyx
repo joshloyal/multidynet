@@ -44,7 +44,7 @@ def update_omega_single(double interceptk,
     return omega, psi_sq
 
 
-cpdef double update_omega(double[:, :, :, ::1] Y,
+cpdef double update_omega(const double[:, :, :, ::1] Y,
                           double[:, :, :, ::1] omega,
                           double[:, :, ::1] X,
                           double[:, :, :, ::1] X_sigma,
@@ -64,18 +64,19 @@ cpdef double update_omega(double[:, :, :, ::1] Y,
         for t in range(n_time_steps):
             for i in range(n_nodes):
                 for j in range(i):
-                    omega[k, t, i, j], psi_sq = update_omega_single(
-                        intercept[k], intercept_sigma[k], X[t, i],
-                        X_sigma[t, i], X[t, j], X_sigma[t, j], lmbda[k],
-                        lmbda_sigma[k])
+                    if Y[k, t, i, j] != -1.0:
+                        omega[k, t, i, j], psi_sq = update_omega_single(
+                            intercept[k], intercept_sigma[k], X[t, i],
+                            X_sigma[t, i], X[t, j], X_sigma[t, j], lmbda[k],
+                            lmbda_sigma[k])
 
-                    omega[k, t, j, i] = omega[k, t, i, j]
+                        omega[k, t, j, i] = omega[k, t, i, j]
 
-                    psi = intercept[k]
-                    for p in range(n_features):
-                        psi += lmbda[k, p] * X[t, i, p] * X[t, j, p]
+                        psi = intercept[k]
+                        for p in range(n_features):
+                            psi += lmbda[k, p] * X[t, i, p] * X[t, j, p]
 
-                    loglik += (Y[k, t, i, j] - 0.5) * psi
-                    loglik -= 0.5 * omega[k, t, i, j] * psi_sq
+                        loglik += (Y[k, t, i, j] - 0.5) * psi
+                        loglik -= 0.5 * omega[k, t, i, j] * psi_sq
 
     return loglik

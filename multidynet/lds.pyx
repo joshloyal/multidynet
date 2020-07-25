@@ -12,7 +12,7 @@ cimport numpy as np
 from libc.math cimport pow
 
 
-def calculate_natural_parameters(double[:, :, :, ::1] Y,
+def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:, ::1] lmbda,
@@ -34,20 +34,20 @@ def calculate_natural_parameters(double[:, :, :, ::1] Y,
     for t in range(n_time_steps):
         for k in range(n_layers):
             for j in range(n_nodes):
-                if j != i:
-                    for p in range(n_features):
-                        eta1[t, p] += (
-                            lmbda[k, p] * X[t, j, p] * (
-                                Y[k, t, i, j] - 0.5 -
-                                    omega[k, t, i, j] * intercept[k]))
+                    if j != i and Y[k, t, i, j] != -1.0:
+                        for p in range(n_features):
+                            eta1[t, p] += (
+                                lmbda[k, p] * X[t, j, p] * (
+                                    Y[k, t, i, j] - 0.5 -
+                                        omega[k, t, i, j] * intercept[k]))
 
-                        for q in range(p + 1):
-                            eta2[t, p, q] += omega[k, t, i, j] * (
-                                (lmbda_sigma[k, p, q] +
-                                    lmbda[k, p] * lmbda[k, q]) *
-                                (X_sigma[t, j, p, q] +
-                                    X[t, j, p] * X[t, j, q]))
-                            eta2[t, q, p] = eta2[t, p, q]
+                            for q in range(p + 1):
+                                eta2[t, p, q] += omega[k, t, i, j] * (
+                                    (lmbda_sigma[k, p, q] +
+                                        lmbda[k, p] * lmbda[k, q]) *
+                                    (X_sigma[t, j, p, q] +
+                                        X[t, j, p] * X[t, j, q]))
+                                eta2[t, q, p] = eta2[t, p, q]
 
     return np.asarray(eta1), np.asarray(eta2)
 
@@ -187,7 +187,7 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
     return mean, cov, cross_cov
 
 
-def update_latent_position_single(double[:, :, :, ::1] Y,
+def update_latent_position_single(const double[:, :, :, ::1] Y,
                                   np.ndarray[double, ndim=3, mode='c'] X,
                                   np.ndarray[double, ndim=4, mode='c'] X_sigma,
                                   np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
@@ -208,7 +208,7 @@ def update_latent_position_single(double[:, :, :, ::1] Y,
         A, B, tau_prec, sigma_prec)
 
 
-def update_latent_positions(double[:, :, :, ::1] Y,
+def update_latent_positions(const double[:, :, :, ::1] Y,
                             np.ndarray[double, ndim=3, mode='c'] X,
                             np.ndarray[double, ndim=4, mode='c'] X_sigma,
                             np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
