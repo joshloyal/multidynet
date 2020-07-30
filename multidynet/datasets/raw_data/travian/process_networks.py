@@ -54,7 +54,7 @@ for k in range(n_layers):
     for t in range(n_time_steps):
         data_kt = (data.query('k == {}'.format(k))
                        .query('t == {}'.format(t)))
-        edgelist = data[['node_a', 'node_b']].values
+        edgelist = data_kt[['node_a', 'node_b']].values
         edge_data = np.ones(edgelist.shape[0])
         Y_tmp = sp.coo_matrix((edge_data, (edgelist[:, 0], edgelist[:, 1])),
                               shape=(n_nodes, n_nodes), dtype=np.int).toarray()
