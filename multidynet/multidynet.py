@@ -10,7 +10,6 @@ from sklearn.metrics import roc_auc_score
 from sklearn.utils import check_array, check_random_state
 from tqdm import tqdm
 
-from .latent_space import generalized_mds
 from .omega import update_omega
 from .lds import update_latent_positions
 from .lmbdas import update_lambdas
