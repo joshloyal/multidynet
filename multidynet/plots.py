@@ -87,7 +87,7 @@ def plot_sociability(model, k=0, node_labels=None, color='gray', ax=None,
     ax.barh(y_pos, log_odds, align='center', color=color)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(node_labels[order])
-    ax.set_xlabel('log-odds [$\exp(delta_k^i)]$')
+    ax.set_xlabel('log-odds [$\exp(\delta_k^i)]$')
     ax.set_title('k = {}'.format(k))
 
     return ax
