@@ -71,8 +71,7 @@ def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
     return ax
 
 
-def plot_sociability(model, k=0, node_labels=None, color='gray', ax=None,
-                     figsize=(10, 12)):
+def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12)):
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
@@ -84,7 +83,10 @@ def plot_sociability(model, k=0, node_labels=None, color='gray', ax=None,
     log_odds = np.exp(model.delta_[k][order])
 
     y_pos = np.arange(node_labels.shape[0])
-    ax.barh(y_pos, log_odds, align='center', color=color)
+
+    colors = ['steelblue' if log_odds[i] >= 1. else 'gray' for i in
+              range(len(log_odds))]
+    ax.barh(y_pos, log_odds, align='center', color=colors)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(node_labels[order])
     ax.set_xlabel('log-odds [$\exp(\delta_k^i)]$')
