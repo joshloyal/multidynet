@@ -19,7 +19,11 @@ def update_omega_single(double interceptk,
                         double[::1] Xjt,
                         double[:, ::1] Xjt_sigma,
                         double[::1] lmbdak,
-                        double[:, ::1] lmbdak_sigma):
+                        double[:, ::1] lmbdak_sigma,
+                        double deltaki,
+                        double deltakj,
+                        double deltaki_sigma,
+                        double deltakj_sigma):
     cdef double psi_sq = 0.
     cdef double c_omega = 0.
     cdef double omega = 0.
@@ -28,8 +32,13 @@ def update_omega_single(double interceptk,
 
     # calculate the natural parameter
     psi_sq += interceptk_sigma + interceptk ** 2
+    psi_sq += deltaki_sigma + deltaki ** 2
+    psi_sq += deltakj_sigma + deltakj ** 2
+    psi_sq += 2 * interceptk * (deltaki + deltakj)
+    psi_sq += 2 * deltaki * deltakj
     for p in range(n_features):
-        psi_sq += 2 * interceptk * lmbdak[p] * Xit[p] * Xjt[p]
+        psi_sq += (2 * (interceptk + deltaki + deltakj) *
+                    lmbdak[p] * Xit[p] * Xjt[p])
 
         for q in range(n_features):
             psi_sq += ((lmbdak_sigma[p, q] + lmbdak[p] * lmbdak[q]) *
@@ -51,7 +60,9 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                           double[::1] intercept,
                           double[::1] intercept_sigma,
                           double[:, ::1] lmbda,
-                          double[:, :, ::1] lmbda_sigma):
+                          double[:, :, ::1] lmbda_sigma,
+                          double[:, ::1] delta,
+                          double[:, ::1] delta_sigma):
     cdef size_t n_layers = omega.shape[0]
     cdef size_t n_time_steps = omega.shape[1]
     cdef size_t n_nodes = omega.shape[2]
@@ -68,11 +79,12 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                         omega[k, t, i, j], psi_sq = update_omega_single(
                             intercept[k], intercept_sigma[k], X[t, i],
                             X_sigma[t, i], X[t, j], X_sigma[t, j], lmbda[k],
-                            lmbda_sigma[k])
+                            lmbda_sigma[k], delta[k, i], delta[k, j],
+                            delta_sigma[k, i], delta_sigma[k, j])
 
                         omega[k, t, j, i] = omega[k, t, i, j]
 
-                        psi = intercept[k]
+                        psi = intercept[k] + delta[k, i] + delta[k, j]
                         for p in range(n_features):
                             psi += lmbda[k, p] * X[t, i, p] * X[t, j, p]
 

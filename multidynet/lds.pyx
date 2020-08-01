@@ -17,6 +17,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:, ::1] lmbda,
                                  double[:, :, ::1] lmbda_sigma,
+                                 double[:, ::1] delta,
                                  double[::1] intercept,
                                  double[:, :, :, ::1] omega,
                                  int i):
@@ -39,7 +40,8 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                             eta1[t, p] += (
                                 lmbda[k, p] * X[t, j, p] * (
                                     Y[k, t, i, j] - 0.5 -
-                                        omega[k, t, i, j] * intercept[k]))
+                                        omega[k, t, i, j] * (
+                                            intercept[k] + delta[k, i] + delta[k, j])))
 
                             for q in range(p + 1):
                                 eta2[t, p, q] += omega[k, t, i, j] * (
@@ -214,6 +216,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] lmbda_sigma,
+                            double[:, ::1] delta,
                             double[::1] intercept,
                             double[:, :, :, ::1] omega,
                             double tau_prec,
@@ -225,7 +228,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
-            Y, X, X_sigma, lmbda, lmbda_sigma, intercept, omega, i)
+            Y, X, X_sigma, lmbda, lmbda_sigma, delta, intercept, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)

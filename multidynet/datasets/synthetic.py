@@ -12,18 +12,25 @@ __all__ = ['simple_dynamic_multilayer_network', 'simple_dynamic_network']
 
 
 def multilayer_network_from_dynamic_latent_space(X, lmbda, intercept,
+                                                 delta=None,
                                                  random_state=None):
     rng = check_random_state(random_state)
 
     n_time_steps, n_nodes, _ = X.shape
     n_layers = lmbda.shape[0]
+
+    if delta is None:
+        delta = np.zeros((n_layers, n_nodes), dtype=np.float64)
+
     Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             # sample the adjacency matrix
-            eta = intercept[k] + np.dot(X[t] * lmbda[k], X[t].T)
+            deltak = delta[k].reshape(-1, 1)
+            eta = (intercept[k] + np.add(deltak, deltak.T) +
+                    np.dot(X[t] * lmbda[k], X[t].T))
             probas[k, t] = expit(eta)
 
             Y[k, t] = rng.binomial(1, probas[k, t]).astype(np.int)
@@ -63,6 +70,7 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
                                       lmbda=None,
                                       intercept=1.0,
                                       assortative_reference=True,
+                                      include_node_effects=False,
                                       random_state=42):
     rng = check_random_state(random_state)
 
@@ -90,11 +98,18 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
     if not isinstance(intercept, np.ndarray):
         intercept = np.repeat(intercept, n_layers)
 
+    if include_node_effects:
+        delta = 2 * rng.randn(n_layers, n_nodes)
+        #delta[:, 0] = 0.
+        intercept = np.zeros(n_layers)
+    else:
+        delta = np.zeros((n_layers, n_nodes), dtype=np.float64)
+
     # construct the network
     Y = multilayer_network_from_dynamic_latent_space(
-        X, lmbda, intercept, random_state=rng)
+        X, lmbda, intercept, delta, random_state=rng)
 
-    return Y, X, lmbda, intercept
+    return Y, X, lmbda, intercept, delta
 
 
 def simple_dynamic_network(n_nodes=100, n_time_steps=4,
