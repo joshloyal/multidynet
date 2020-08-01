@@ -4,7 +4,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, to_hex
 from scipy.stats import norm
 from dynetlsm.plots import get_colors
 
@@ -135,24 +135,26 @@ def plot_node_trajectories(model, node_list, q_alpha=0.8, node_labels=None,
     return ax
 
 
-def plot_lambda(model, palette='muted', height=8, y='latent dimension'):
+def plot_lambda(model, q_alpha=0.8, height=0.5, figsize=(10, 8)):
     n_layers, n_features = model.lambda_.shape
 
-    data = pd.DataFrame(model.lambda_,
-        columns=['p = {}'.format(p + 1) for p in range(n_features)])
-    data['layer'] = ['k = {}'.format(k + 1) for k in range(n_layers)]
-
-    data = pd.melt(data, id_vars=['layer'], var_name=['latent dimension'],
-                   value_name='$\lambda$')
+    labels = ['k = {}'.format(k + 1) for k in range(n_layers)]
 
     sns.set_style('whitegrid')
-    if y == 'latent dimension':
-        g = sns.catplot(x='$\lambda$', y='latent dimension', hue='layer',
-                        data=data, kind='bar', palette=palette, height=height)
-    else:
-        g = sns.catplot(x='$\lambda$', y='layer', hue='latent dimension',
-                        data=data, kind='bar', palette=palette, height=height)
-    g.despine(left=True)
+    fig, axes = plt.subplots(n_features, 1, figsize=figsize)
+    colors = [to_hex(c) for c in sns.color_palette(
+                'muted', n_colors=n_layers, desat=0.75)]
+
+    z_alpha = norm.ppf(q_alpha)
+    for p, ax in enumerate(axes.flat):
+        xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
+        ax.barh(labels, model.lambda_[:, p], xerr=xerr, height=height,
+                color=colors)
+        ax.invert_yaxis()
+        ax.set_title('p = {}'.format(p + 1))
+
+    axes.flat[-1].set_xlabel('$\lambda_p$')
+
     sns.set_style('white')
 
-    return g
+    return axes
