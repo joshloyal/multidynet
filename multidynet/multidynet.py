@@ -8,6 +8,7 @@ from scipy.special import logit, gammainc, expit
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import roc_auc_score
 from sklearn.utils import check_array, check_random_state
+from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 
 from .omega import update_omega
@@ -49,6 +50,49 @@ class ModelParameters(object):
         self.logp_ = []
 
 
+
+def initialize_node_effects_single(Y):
+    n_time_steps, n_nodes, _ = Y.shape
+
+    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+    dyads = np.tril_indices_from(Y[0], k=-1)
+    y_vec = np.zeros(n_time_steps * n_dyads)
+
+    # construct dummy node indicators
+    cols = np.r_[dyads[0], dyads[1]]
+    rows = np.r_[np.arange(n_dyads), np.arange(n_dyads)]
+    x_dummy = sp.coo_matrix((np.ones(2 * n_dyads), (rows, cols)),
+                            shape=(n_dyads, n_nodes))
+
+    # dyad target
+    for t in range(n_time_steps):
+        yt_vec = Y[t][dyads]
+        y_vec[(t * n_dyads):((t+1) * n_dyads)] = Y[t][dyads]
+        if t > 0:
+            X = sp.vstack((X, x_dummy))
+        else:
+            X = x_dummy.copy()
+    X = X.tocsr()
+
+    # remove missing values
+    non_missing = y_vec != -1.0
+
+    logreg = LogisticRegression(fit_intercept=False, C=1e5)
+    logreg.fit(X[non_missing], y_vec[non_missing])
+
+    return logreg.coef_[0]
+
+
+def initialize_node_effects(Y):
+    n_layers, n_time_steps, n_nodes, _ = Y.shape
+
+    delta = np.zeros((n_layers, n_nodes))
+    for k in range(n_layers):
+        delta[k] = initialize_node_effects_single(Y[k])
+
+    return delta
+
+
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
                           delta_var_prior, intercept_var_prior,
                           include_node_effects,
@@ -73,18 +117,27 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     X_cross_cov = np.tile(
         cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
-    # initialize intercept based on edge density
-    intercept = np.zeros(n_layers)
-    for k in range(n_layers):
-        for t in range(n_time_steps):
-            Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
-            intercept[k] += Y_vec[Y_vec != -1.0].mean()
-        intercept[k] /= n_time_steps
 
     if include_node_effects:
         intercept = np.zeros(n_layers)
+
+        #for k in range(n_layers):
+        #    for t in range(n_time_steps):
+        #        Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
+        #        intercept[k] += Y_vec[Y_vec != -1.0].mean()
+        #intercept /= n_time_steps
+        #intercept = logit(intercept)
+
         intercept_sigma = np.zeros(n_layers)
     else:
+        # initialize intercept based on edge density
+        intercept = np.zeros(n_layers)
+        for k in range(n_layers):
+            for t in range(n_time_steps):
+                Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
+                intercept[k] += Y_vec[Y_vec != -1.0].mean()
+
+        intercept /= n_time_steps
         intercept = logit(intercept)
         intercept_sigma = intercept_var_prior * np.ones(n_layers)
 
@@ -101,7 +154,9 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # initialize node-effects based on degree
     if include_node_effects:
         #delta = logit(np.mean(Y, axis=(1, 2)) + 1e-3)
-        delta = rng.randn(n_layers, n_nodes)
+        #delta = 2 * rng.randn(n_layers, n_nodes)
+        delta = initialize_node_effects(Y)
+        #delta[:, 0] = -np.sum(delta[:, 1:], axis=1)
         #delta[:, 0] = 0.
         delta_sigma = delta_var_prior * np.ones((n_layers, n_nodes))
         #delta_sigma[:, 0] = 0.

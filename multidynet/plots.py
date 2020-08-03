@@ -71,7 +71,8 @@ def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
     return ax
 
 
-def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12)):
+def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12),
+                     color_code=False):
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
@@ -84,8 +85,11 @@ def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12)):
 
     y_pos = np.arange(node_labels.shape[0])
 
-    colors = ['steelblue' if log_odds[i] >= 1. else 'gray' for i in
-              range(len(log_odds))]
+    if color_code:
+        colors = ['steelblue' if log_odds[i] >= 1. else 'gray' for i in
+                  range(len(log_odds))]
+    else:
+        colors = 'gray'
     ax.barh(y_pos, log_odds, align='center', color=colors)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(node_labels[order])
@@ -95,7 +99,7 @@ def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12)):
     return ax
 
 
-def plot_node_trajectories(model, node_list, q_alpha=0.8, node_labels=None,
+def plot_node_trajectories(model, node_list, q_alpha=0.95, node_labels=None,
                            nrows=None, ncols=1, alpha=0.2, figsize=(10, 8)):
 
     if nrows is None:
@@ -128,35 +132,71 @@ def plot_node_trajectories(model, node_list, q_alpha=0.8, node_labels=None,
     ax[0].legend(bbox_to_anchor=(1.04, 1), loc='upper left')
     ax[-1].set_xlabel('t')
     for p in range(n_features):
-        ax[p].set_title('p = {}'.format(p))
+        ax[p].set_title('p = {}'.format(p + 1))
         ax[p].hlines(0, 1, n_time_steps, lw=2, linestyles='dotted')
-        ax[p].set_ylabel('Latent Position [p = {}]'.format(p))
+        ax[p].set_ylabel('Latent Position [p = {}]'.format(p + 1))
 
     plt.subplots_adjust(right=0.7)
+    fig.suptitle('Trajectories of Latent Positions')
 
     return ax
 
 
-def plot_lambda(model, q_alpha=0.8, height=0.5, figsize=(10, 8)):
+def plot_lambda(model, q_alpha=0.95, height=0.5, figsize=(10, 8), include_gridlines=False):
     n_layers, n_features = model.lambda_.shape
 
     labels = ['k = {}'.format(k + 1) for k in range(n_layers)]
 
-    sns.set_style('whitegrid')
-    fig, axes = plt.subplots(n_features, 1, figsize=figsize)
+    if include_gridlines:
+        sns.set_style('whitegrid')
+
+    fig, axes = plt.subplots(n_features, 1, figsize=figsize, sharex=True)
     colors = [to_hex(c) for c in sns.color_palette(
-                'muted', n_colors=n_layers, desat=0.75)]
+              'muted', n_colors=n_layers, desat=0.75)]
 
     z_alpha = norm.ppf(q_alpha)
     for p, ax in enumerate(axes.flat):
         xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
-        ax.barh(labels, model.lambda_[:, p], xerr=xerr, height=height,
-                color=colors)
+
+        colors = ['red' if model.lambda_[k, p] > 0 else 'blue' for
+                  k in range(n_layers)]
+        ax.hlines(np.arange(n_layers), 0, model.lambda_[:, p], lw=1,
+                  color=colors, linestyles='--')
+        ax.errorbar(model.lambda_[:, p], np.arange(n_layers), fmt='o',
+                    xerr=xerr, ecolor='k', capsize=5,
+                    color='k', markersize=9, markeredgecolor='w')
+
+        # add text
+        for k in range(n_layers):
+            align = 'right' if model.lambda_[k, p]  >= 0 else 'left'
+
+            lmbda = model.lambda_[k, p]
+            if k == 0:
+                txt = '{}'.format(lmbda)
+            else:
+                txt = '{:.2f} ({:.2f}, {:.2f})'.format(
+                    lmbda, lmbda - xerr[k], lmbda + xerr[k])
+            ax.text(lmbda, k - 0.1, txt, horizontalalignment=align)
+
+        ax.set_ylabel('Layer #'.format(p + 1))
+
+        ax.set_yticks(np.arange(n_layers))
+        ax.set_yticklabels(['k = {}'.format(k + 1) for k in np.arange(n_layers)])
         ax.invert_yaxis()
         ax.set_title('p = {}'.format(p + 1))
 
-    axes.flat[-1].set_xlabel('$\lambda_p$')
+        axes.flat[-1].set_xlabel('$\lambda_{kp}$')
+
+    x_max = max([ax.get_xlim()[1] for ax in axes.flat])
+    for ax in axes.flat:
+        if np.all(model.lambda_ >= 0):
+            ax.set_xlim(0, x_max)
+        else:
+            ax.vlines(0, 0, n_layers - 1, linestyles='dotted')
+        sns.despine(ax=ax, bottom=True)
 
     sns.set_style('white')
+
+    fig.suptitle('Assortativity Parameters $\Lambda_k$')
 
     return axes

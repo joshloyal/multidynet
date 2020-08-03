@@ -54,6 +54,7 @@ def update_deltas(const double[:, :, :, ::1] Y,
     cdef size_t n_nodes = delta.shape[1]
     cdef double eta1
     cdef double eta2
+    cdef double delta_old
 
     # start by updating signs of the reference layer
     for k in range(n_layers):

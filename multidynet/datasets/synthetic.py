@@ -99,8 +99,8 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
         intercept = np.repeat(intercept, n_layers)
 
     if include_node_effects:
-        delta = 2 * rng.randn(n_layers, n_nodes)
-        #delta[:, 0] = 0.
+        delta = rng.randn(n_layers, n_nodes)
+        #delta[:, 0] = -np.sum(delta[:, 1:], axis=1)
         intercept = np.zeros(n_layers)
     else:
         delta = np.zeros((n_layers, n_nodes), dtype=np.float64)
