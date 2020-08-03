@@ -1,10 +1,14 @@
+import numbers
+
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+import numpy.linalg as linalg
 import seaborn as sns
 import pandas as pd
 
 from matplotlib.colors import ListedColormap, to_hex
+from matplotlib.patches import Ellipse, Rectangle, FancyArrowPatch
 from scipy.stats import norm
 from dynetlsm.plots import get_colors
 
@@ -13,7 +17,46 @@ __all__ = ['plot_network', 'plot_network_communities',
            'plot_sociability', 'plot_lambda', 'plot_node_trajectories']
 
 
-def plot_network(Y, X, normalize=True, figsize=(8, 6), node_color='orangered',
+def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
+    if cov.shape[0] != 2:
+        raise ValueError('Only for bivariate normal densities.')
+
+    eigenvalues, eigenvectors = linalg.eigh(cov)
+
+    # sort the eigenvalues and eigenvectors in descending order
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+
+    # determine the angle of rotation
+    angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
+
+    if ax is None:
+        ax = plt.gca()
+
+    if isinstance(n_std, numbers.Integral):
+        # the diameter of the ellipse is twice the square root of the evalues
+        width, height = 2 * n_std * np.sqrt(eigenvalues)
+        ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
+                          **kwargs)
+        ax.add_artist(ellipse)
+
+        return ellipse
+
+    ellipses = []
+    for std in n_std:
+        width, height = 2 * std * np.sqrt(eigenvalues)
+        ellipse = Ellipse(xy=mean, width=width, height=height, angle=angle,
+                          **kwargs)
+
+        ax.add_artist(ellipse)
+        ellipses.append(ellipse)
+
+    return ellipses
+
+
+def plot_network(Y, X, tau_sq=None, normalize=True, figsize=(8, 6),
+                 node_color='orangered',
                  alpha=1.0, size=300, edge_width=0.25, node_labels=None,
                  font_size=12, with_labels=False):
     fig, ax = plt.subplots(figsize=figsize)
@@ -40,8 +83,18 @@ def plot_network(Y, X, normalize=True, figsize=(8, 6), node_color='orangered',
                      with_labels=with_labels,
                      ax=ax)
     ax.collections[0].set_edgecolor('white')
+
     ax.axis('equal')
     ax.axis('off')
+
+    # draw center of latent space
+    ax.scatter(0, 0, color='k', marker='+', s=200)
+
+    # draw normal contour if available
+    if tau_sq is not None:
+        normal_contour([0, 0], tau_sq * np.eye(X.shape[1]), n_std=[1],
+                       linestyle='--', edgecolor='k',
+                       facecolor='none', zorder=1, ax=ax)
 
     return ax
 
