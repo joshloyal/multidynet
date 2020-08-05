@@ -13,6 +13,7 @@ cimport numpy as np
 def calculate_natural_parameters(np.ndarray[double, ndim=4, mode='c'] Y,
                                  np.ndarray[double, ndim=3, mode='c'] X,
                                  np.ndarray[double, ndim=2, mode='c'] lmbda,
+                                 np.ndarray[double, ndim=2, mode='c'] delta,
                                  np.ndarray[double, ndim=4, mode='c'] omega,
                                  double intercept_var_prior,
                                  int k):
@@ -26,7 +27,9 @@ def calculate_natural_parameters(np.ndarray[double, ndim=4, mode='c'] Y,
     # NOTE: do not screen missing values since omega is zero anyway
     eta2 = 0.5 * np.sum(omega[k]) + (1. / intercept_var_prior)
     for t in range(n_time_steps):
-        tmp = Y[k, t] - 0.5 - omega[k, t] * np.dot(X[t] * lmbda[k], X[t].T)
+        deltak = delta[k].reshape(-1, 1)
+        tmp = Y[k, t] - 0.5 - omega[k, t] * (
+            np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T))
 
         # screen for missing values
         tril_indices = np.tril_indices_from(tmp, k=-1)
@@ -41,6 +44,7 @@ def update_intercepts(np.ndarray[double, ndim=4, mode='c'] Y,
                       double[:] intercept,
                       double[:] intercept_sigma,
                       np.ndarray[double, ndim=2, mode='c'] lmbda,
+                      np.ndarray[double, ndim=2, mode='c'] delta,
                       np.ndarray[double, ndim=4, mode='c'] omega,
                       double intercept_var_prior):
     cdef size_t k
@@ -50,7 +54,7 @@ def update_intercepts(np.ndarray[double, ndim=4, mode='c'] Y,
 
     for k in range(n_layers):
         eta1, eta2 = calculate_natural_parameters(
-            Y, X, lmbda, omega, intercept_var_prior, k)
+            Y, X, lmbda, delta, omega, intercept_var_prior, k)
 
         intercept_sigma[k] = 1. / eta2
         intercept[k] = intercept_sigma[k] * eta1
