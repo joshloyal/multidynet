@@ -10,14 +10,14 @@ def load_icews():
     module_path = dirname(__file__)
     file_path = join(module_path, 'raw_data')
 
-    n_nodes = 50
+    n_nodes = 65
     n_layers = 4
-    n_months = 12
-    Y = np.zeros((n_layers, n_months, n_nodes, n_nodes))
+    n_time_steps = 96
+    Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
-    file_fmt = join('icews', 'icews_2012_{}_{}.npy')
+    file_fmt = join('icews', 'icews_{}_{}.npy')
     for k in range(n_layers):
-        for t in range(n_months):
+        for t in range(n_time_steps):
             Y[k, t] = np.loadtxt(join(file_path, file_fmt.format(k+1, t+1)))
 
     countries = np.loadtxt(

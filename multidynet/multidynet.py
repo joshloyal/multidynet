@@ -50,7 +50,6 @@ class ModelParameters(object):
         self.logp_ = []
 
 
-
 def initialize_node_effects_single(Y):
     n_time_steps, n_nodes, _ = Y.shape
 
@@ -120,14 +119,6 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     if include_node_effects:
         intercept = np.zeros(n_layers)
-
-        #for k in range(n_layers):
-        #    for t in range(n_time_steps):
-        #        Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
-        #        intercept[k] += Y_vec[Y_vec != -1.0].mean()
-        #intercept /= n_time_steps
-        #intercept = logit(intercept)
-
         intercept_sigma = np.zeros(n_layers)
     else:
         # initialize intercept based on edge density
@@ -153,13 +144,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize node-effects based on degree
     if include_node_effects:
-        #delta = logit(np.mean(Y, axis=(1, 2)) + 1e-3)
-        #delta = 2 * rng.randn(n_layers, n_nodes)
         delta = initialize_node_effects(Y)
-        #delta[:, 0] = -np.sum(delta[:, 1:], axis=1)
-        #delta[:, 0] = 0.
         delta_sigma = delta_var_prior * np.ones((n_layers, n_nodes))
-        #delta_sigma[:, 0] = 0.
     else:
         delta = np.zeros((n_layers, n_nodes))
         delta_sigma = np.zeros((n_layers, n_nodes))
@@ -206,9 +192,11 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # latent trajectory updates
         tau_sq_prec = (
-            model.a_tau_sq_ / model.b_tau_sq_ if tau_sq == 'auto' else 1. / tau_sq)
+            model.a_tau_sq_ / model.b_tau_sq_ if tau_sq == 'auto' else
+                1. / tau_sq)
         sigma_sq_prec = (
-            model.c_sigma_sq_ / model.d_sigma_sq_ if sigma_sq == 'auto' else 1. / sigma_sq)
+            model.c_sigma_sq_ / model.d_sigma_sq_ if sigma_sq == 'auto' else
+                1. / sigma_sq)
 
 
         update_latent_positions(

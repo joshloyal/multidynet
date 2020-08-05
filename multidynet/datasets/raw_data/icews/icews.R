@@ -3,7 +3,7 @@ library(readr)
 library(zeallot)
 library(tidyverse)
 
-data <- read_csv('~/myworkspace/gdelt/events_2012.csv')
+data <- read_csv('~/myworkspace/gdelt/events_2011.csv')
 
 
 filter_relation <- function(data, type = "quadclass", n_countries = 50) {
@@ -81,7 +81,7 @@ c(Y_cameo, countries) %<-% filter_relation(data, type = 'quadclass', n_countries
 for (k in 1:4) {
     for (t in 1:12) {
         Y <- as.matrix(Y_cameo[k, t,,])
-        write.table(Y, file=paste0('icews_2012_', k, '_', t, '.npy'),
+        write.table(Y, file=paste0('icews_2011_', k, '_', t, '.npy'),
                     col.names = FALSE, row.names = FALSE)
     }
 }

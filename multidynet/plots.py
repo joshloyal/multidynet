@@ -153,7 +153,8 @@ def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12),
 
 
 def plot_node_trajectories(model, node_list, q_alpha=0.95, node_labels=None,
-                           nrows=None, ncols=1, alpha=0.2, figsize=(10, 8)):
+                           nrows=None, ncols=1, alpha=0.2, linestyle='o--',
+                           figsize=(10, 8)):
 
     if nrows is None:
         nrows = model.X_.shape[2]
@@ -173,7 +174,7 @@ def plot_node_trajectories(model, node_list, q_alpha=0.95, node_labels=None,
         x_upp = np.zeros(n_time_steps)
         x_low = np.zeros(n_time_steps)
         for p in range(n_features):
-            ax[p].plot(ts, model.X_[:, node_id, p], 'o--',
+            ax[p].plot(ts, model.X_[:, node_id, p], linestyle,
                        label=node_labels[node_id])
             for t in range(n_time_steps):
                 se = z_alpha * np.sqrt(model.X_sigma_[t, node_id, p, p])
