@@ -124,8 +124,8 @@ def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
     return ax
 
 
-def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12),
-                     color_code=False):
+def plot_sociability(model, k=0, node_labels=None, ax=None,
+                     figsize=(10, 12), color_code=False):
     if ax is None:
         _, ax = plt.subplots(figsize=figsize)
 
@@ -134,19 +134,18 @@ def plot_sociability(model, k=0, node_labels=None, ax=None, figsize=(10, 12),
     node_labels = np.asarray(node_labels)
 
     order = np.argsort(model.delta_[k])
-    log_odds = np.exp(model.delta_[k][order])
-
+    odds = np.exp(model.delta_[k][order])
     y_pos = np.arange(node_labels.shape[0])
 
     if color_code:
-        colors = ['steelblue' if log_odds[i] >= 1. else 'gray' for i in
-                  range(len(log_odds))]
+        colors = ['steelblue' if odds[i] >= 1. else 'gray' for i in
+                  range(len(odds))]
     else:
         colors = 'gray'
-    ax.barh(y_pos, log_odds, align='center', color=colors)
+    ax.barh(y_pos, odds, align='center', color=colors)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(node_labels[order])
-    ax.set_xlabel('log-odds [$\exp(\delta_k^i)]$')
+    ax.set_xlabel('odds [$\exp(\delta_k^i)]$')
     ax.set_title('k = {}'.format(k))
 
     return ax
