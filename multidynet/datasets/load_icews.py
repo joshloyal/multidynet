@@ -18,4 +18,8 @@ def load_icews():
         join(file_path, 'icews', 'numpy_data', 'icews_countries.txt'),
         delimiter='\n', dtype=np.unicode)
 
-    return np.ascontiguousarray(Y), countries
+
+    layer_labels = ['Verbal Cooperation', 'Material Cooperation',
+                    'Verbal Conflict', 'Material Conflict']
+
+    return np.ascontiguousarray(Y), countries, layer_labels

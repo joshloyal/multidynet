@@ -16,7 +16,8 @@ from dynetlsm.plots import get_colors
 
 
 __all__ = ['plot_network', 'plot_network_communities',
-           'plot_sociability', 'plot_lambda', 'plot_node_trajectories']
+           'plot_sociability', 'plot_lambda', 'plot_node_trajectories',
+           'plot_pairwise_probabilities']
 
 
 def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
@@ -157,7 +158,7 @@ def plot_sociability(model, k=0, node_labels=None, layer_label=None, ax=None,
     return ax
 
 
-def plot_node_trajectories(model, node_list, q_alpha=0.95, node_labels=None,
+def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
                            nrows=None, ncols=1, alpha=0.2, linestyle='o--',
                            figsize=(10, 8)):
 
@@ -172,8 +173,8 @@ def plot_node_trajectories(model, node_list, q_alpha=0.95, node_labels=None,
     node_labels = np.asarray(node_labels)
 
     n_time_steps, n_nodes, n_features = model.X_.shape
-    z_alpha = norm.ppf(q_alpha)
-    ts = np.arange(1, n_time_steps + 1)
+    z_alpha = norm.ppf(1 - q_alpha / 2.)
+    ts = np.arange(n_time_steps)
     for node_label in node_list:
         node_id = np.where(node_labels == node_label)[0].item()
         x_upp = np.zeros(n_time_steps)
@@ -270,7 +271,7 @@ def forecast_link_probability(model, k, i, j, horizon=1, n_reps=1000,
 
 def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
                                 node_labels=None,
-                                layer_labels=None, q_alpha=0.975, n_reps=1000,
+                                layer_labels=None, q_alpha=0.05, n_reps=1000,
                                 random_state=123, alpha=0.2, linestyle='--',
                                 figsize=(10, 8)):
     fig, ax = plt.subplots(figsize=figsize)
@@ -301,8 +302,8 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
                 pis = sample_link_probability(
                     model, k, t, i, j, n_reps=n_reps, random_state=random_state)
                 pi_mean[t] = pis.mean()
-                pi_low[t] = np.quantile(pis, q=1 - q_alpha)
-                pi_upp[t] = np.quantile(pis, q=q_alpha)
+                pi_low[t] = np.quantile(pis, q=q_alpha / 2.)
+                pi_upp[t] = np.quantile(pis, q=1 - q_alpha / 2.)
 
             if horizon > 0:
                 pis = forecast_link_probability(
@@ -311,8 +312,10 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
 
                 for h in range(horizon):
                     pi_mean[n_time_steps + h] = pis[h].mean()
-                    pi_low[n_time_steps + h] = np.quantile(pis[h], q=1 - q_alpha)
-                    pi_upp[n_time_steps + h] = np.quantile(pis[h], q=q_alpha)
+                    pi_low[n_time_steps + h] = (
+                        np.quantile(pis[h], q=q_alpha / 2.))
+                    pi_upp[n_time_steps + h] = (
+                        np.quantile(pis[h], q=1 - q_alpha / 2.))
 
             ax.plot(ts, pi_mean, linestyle, label=label)
             ax.fill_between(ts, pi_low, pi_upp, alpha=alpha)
@@ -325,7 +328,7 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
     return fig, ax
 
 
-def plot_lambda(model, q_alpha=0.95, layer_labels=None, height=0.5,
+def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
                 figsize=(10, 8), include_gridlines=False):
     n_layers, n_features = model.lambda_.shape
 
@@ -339,7 +342,7 @@ def plot_lambda(model, q_alpha=0.95, layer_labels=None, height=0.5,
     colors = [to_hex(c) for c in sns.color_palette(
               'muted', n_colors=n_layers, desat=0.75)]
 
-    z_alpha = norm.ppf(q_alpha)
+    z_alpha = norm.ppf(1 - q_alpha / 2.)
     for p, ax in enumerate(axes.flat):
         xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
 
