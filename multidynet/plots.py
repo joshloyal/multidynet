@@ -227,7 +227,8 @@ def sample_link_probability(model, k, t, i, j, n_reps=1000, random_state=123):
     return expit(deltai + deltaj + np.sum(lmbdak * Xi * Xj, axis=1))
 
 
-def forecast_link_probability(model, k, i, j, horizon=1, n_reps=1000, random_state=123):
+def forecast_link_probability(model, k, i, j, horizon=1, n_reps=1000,
+                              random_state=123):
     rng = check_random_state(random_state)
     n_features = model.X_.shape[-1]
 
