@@ -15,7 +15,6 @@ from .omega import update_omega
 from .lds import update_latent_positions
 from .lmbdas import update_lambdas
 from .deltas import update_deltas
-from .intercepts import update_intercepts
 from .variances import update_tau_sq, update_sigma_sq
 from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
@@ -27,16 +26,12 @@ __all__ = ['DynamicMultilayerNetworkLSM']
 
 class ModelParameters(object):
     def __init__(self, omega, X, X_sigma, X_cross_cov,
-                 intercept, intercept_sigma, lmbda, lmbda_sigma,
-                 lmbda_logit_prior, delta, delta_sigma,
-                 a_tau_sq, b_tau_sq, c_sigma_sq,
-                 d_sigma_sq):
+                 lmbda, lmbda_sigma, lmbda_logit_prior, delta, delta_sigma,
+                 a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
         self.X_cross_cov_ = X_cross_cov
-        self.intercept_ = intercept
-        self.intercept_sigma_ = intercept_sigma
         self.lambda_ = lmbda
         self.lambda_sigma_ = lmbda_sigma
         self.lambda_logit_prior_ = lmbda_logit_prior
@@ -93,9 +88,7 @@ def initialize_node_effects(Y):
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                          delta_var_prior, intercept_var_prior,
-                          include_node_effects,
-                          a, b, c, d, random_state):
+                          delta_var_prior, a, b, c, d, random_state):
     rng = check_random_state(random_state)
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -116,22 +109,6 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     X_cross_cov = np.tile(
         cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
-
-    if include_node_effects:
-        intercept = np.zeros(n_layers)
-        intercept_sigma = np.zeros(n_layers)
-    else:
-        # initialize intercept based on edge density
-        intercept = np.zeros(n_layers)
-        for k in range(n_layers):
-            for t in range(n_time_steps):
-                Y_vec = Y[k, t][np.tril_indices_from(Y[k, t], k=-1)]
-                intercept[k] += Y_vec[Y_vec != -1.0].mean()
-
-        intercept /= n_time_steps
-        intercept = logit(intercept)
-        intercept_sigma = intercept_var_prior * np.ones(n_layers)
-
     # intialize to prior means
     lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
     lmbda[0] = (
@@ -143,12 +120,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     lmbda_logit_prior = np.log(lambda_odds_prior)
 
     # initialize node-effects based on degree
-    if include_node_effects:
-        delta = initialize_node_effects(Y)
-        delta_sigma = delta_var_prior * np.ones((n_layers, n_nodes))
-    else:
-        delta = np.zeros((n_layers, n_nodes))
-        delta_sigma = np.zeros((n_layers, n_nodes))
+    delta = initialize_node_effects(Y)
+    delta_sigma = delta_var_prior * np.ones((n_layers, n_nodes))
 
     # initialize based on prior information
     a_tau_sq = a
@@ -158,8 +131,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     return ModelParameters(
         omega=omega, X=X, X_sigma=X_sigma, X_cross_cov=X_cross_cov,
-        intercept=intercept, intercept_sigma=intercept_sigma, lmbda=lmbda,
-        lmbda_sigma=lmbda_sigma, lmbda_logit_prior=lmbda_logit_prior,
+        lmbda=lmbda, lmbda_sigma=lmbda_sigma,
+        lmbda_logit_prior=lmbda_logit_prior,
         delta=delta, delta_sigma=delta_sigma,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
         d_sigma_sq=d_sigma_sq)
@@ -167,8 +140,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  delta_var_prior, intercept_var_prior, include_node_effects,
-                  tau_sq, sigma_sq, a, b, c, d,
+                  delta_var_prior, tau_sq, sigma_sq, a, b, c, d,
                   max_iter, tol, random_state, verbose=True):
 
     # convergence criteria (Eq{L(Y | theta)})
@@ -177,7 +149,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # initialize parameters of the model
     model = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior, delta_var_prior,
-        intercept_var_prior, include_node_effects, a, b, c, d, random_state)
+        a, b, c, d, random_state)
 
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_loglik = loglik
@@ -186,8 +158,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # omega updates
         loglik = update_omega(
-            Y, model.omega_, model.X_, model.X_sigma_, model.intercept_,
-            model.intercept_sigma_, model.lambda_, model.lambda_sigma_,
+            Y, model.omega_, model.X_, model.X_sigma_,
+            model.lambda_, model.lambda_sigma_,
             model.delta_, model.delta_sigma_)
 
         # latent trajectory updates
@@ -201,26 +173,19 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         update_latent_positions(
             Y, model.X_, model.X_sigma_, model.X_cross_cov_,
-            model.lambda_, model.lambda_sigma_, model.delta_, model.intercept_,
+            model.lambda_, model.lambda_sigma_, model.delta_,
             model.omega_, tau_sq_prec, sigma_sq_prec)
 
         # update lambda values
         update_lambdas(
-            Y, model.X_, model.X_sigma_, model.intercept_, model.lambda_,
+            Y, model.X_, model.X_sigma_, model.lambda_,
             model.lambda_sigma_, model.delta_, model.omega_, lambda_var_prior,
             model.lambda_logit_prior_)
 
         # update node random effects
-        if include_node_effects:
-            update_deltas(
-                Y, model.X_, model.lambda_, model.intercept_, model.delta_,
-                model.delta_sigma_, model.omega_, delta_var_prior)
-
-        # update intercept
-        if not include_node_effects:
-            update_intercepts(
-                Y, model.X_, model.intercept_, model.intercept_sigma_,
-                model.lambda_, model.delta_, model.omega_, intercept_var_prior)
+        update_deltas(
+            Y, model.X_, model.lambda_, model.delta_,
+            model.delta_sigma_, model.omega_, delta_var_prior)
 
         # update intial variance of the latent space
         if tau_sq == 'auto':
@@ -244,7 +209,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     return model
 
 
-def calculate_probabilities(X, lmbda, delta, intercept):
+def calculate_probabilities(X, lmbda, delta):
     n_layers = lmbda.shape[0]
     n_time_steps = X.shape[0]
     n_nodes = X.shape[1]
@@ -254,36 +219,97 @@ def calculate_probabilities(X, lmbda, delta, intercept):
     for k in range(n_layers):
         for t in range(n_time_steps):
             deltak = delta[k].reshape(-1, 1)
-            eta = (intercept[k] +
-                np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T))
+            eta = np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
     return probas
 
 
 class DynamicMultilayerNetworkLSM(object):
+    """An Eigenmodel for Dynamic Multilayer Networks
+
+    Parameters
+    ----------
+    n_features : int (default=2)
+        The number of latent features. This is the dimension of the
+        latent space.
+
+    lambda_odds_prior : float (default=2)
+        The prior odds of a component in the reference layering being positive.
+        Our prior assumes an assortative reference layer is twice as likely
+        as a disassortative reference layer.
+
+    lambda_var_prior : float (default=4)
+        The variance of the normal prior placed on the assortativity parameters.
+
+    delta_var_prior : float (default=4)
+        The variance of the normal prior placed on the degree random effects.
+
+    tau_sq : float or str (default='auto')
+        The variance of the normal prior placed on the initial distribution of
+        the latent positions. If tau_sq == 'auto', then the value is inferred
+        from the data.
+
+    sigma_sq : float or str (default='auto')
+        The random-walk variance of the latent positions. If sigma_sq == 'auto',
+        then the value is inferred from the data.
+
+    a : float (default=4.)
+        Shape parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
+        Only relevant if `tau_sq`=='auto'.
+
+    b : float (default=8.)
+        Scale parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
+        Only relevant if `tau_sq`=='auto'.
+
+    c : float (default=10.)
+        Shape parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
+        Only relevant if `sigma_sq`=='auto.
+
+    d : float (default=0.1)
+        Scale parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
+        Only relevant if `sigma_sq`=='auto.
+
+    n_init : int (default=1)
+        The number of initializations to perform. The result with the highest
+        expected log-likelihood is kept.
+
+    max_iter : int (default=500)
+        The number of coordinate ascent variational inference (CAVI) iterations
+        to perform.
+
+    tol : float (default=1e-2)
+        The convergence threshold. CAVI iterations will stop when the expected
+        log-likelihood gain is below this threshold.
+
+    n_jobs : int (default=-1)
+        The number of jobs to run in parallel. The number of initializations are
+        run in parallel. `-1` means using all processors.
+
+    random_state : int, RandomState instance or None (default=42)
+        Controls the random seed given to the method chosen to initialize
+        the parameters. In addition, it controls generation of random samples
+        from the fitted posterior distribution. Pass an int for reproducible
+        output across multiple function calls.
+    """
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4,
                  delta_var_prior=4,
-                 intercept_var_prior=4,
                  tau_sq='auto', sigma_sq='auto',
-                 a=4.0, b=8.0, c=10, d=0.1,
-                 include_node_effects=True,
+                 a=4.0, b=8.0, c=10., d=0.1,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.delta_var_prior = delta_var_prior
-        self.intercept_var_prior = intercept_var_prior
         self.tau_sq = tau_sq
         self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
         self.d = d
-        self.include_node_effects = include_node_effects
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -307,7 +333,6 @@ class DynamicMultilayerNetworkLSM(object):
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features, self.lambda_odds_prior,
                 self.lambda_var_prior, self.delta_var_prior,
-                self.intercept_var_prior, self.include_node_effects,
                 self.tau_sq, self.sigma_sq, self.a, self.b, self.c, self.d,
                 self.max_iter, self.tol, seed, verbose=verbose)
             for seed in seeds)
@@ -329,7 +354,7 @@ class DynamicMultilayerNetworkLSM(object):
 
         # calculate dyad-probabilities
         self.probas_ = calculate_probabilities(
-            self.X_, self.lambda_, self.delta_, self.intercept_)
+            self.X_, self.lambda_, self.delta_)
 
         # calculate in-sample AUC
         self.auc_ = calculate_auc(Y, self.probas_)
@@ -341,12 +366,12 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_ = model.X_
         self.X_sigma_ = model.X_sigma_
         self.X_cross_cov_ = model.X_cross_cov_
-        self.intercept_ = model.intercept_
-        self.intercept_sigma_ = model.intercept_sigma_
         self.lambda_ = model.lambda_
         self.lambda_[0] = np.sign(model.lambda_[0])
         self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
         self.lambda_sigma_ = model.lambda_sigma_
+        self.delta_ = model.delta_
+        self.delta_sigma_ = model.delta_sigma_
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
         self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
@@ -354,10 +379,3 @@ class DynamicMultilayerNetworkLSM(object):
         self.d_sigma_sq_ = model.d_sigma_sq_
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
         self.logp_ = model.logp_
-
-        if self.include_node_effects:
-            self.delta_ = model.delta_
-            self.delta_sigma_ = model.delta_sigma_
-
-    def logp(self, Y):
-        return log_likelihood(Y, self.X_, self.lambda_, self.intercept_)

@@ -18,7 +18,6 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, ::1] lmbda,
                                  double[:, :, ::1] lmbda_sigma,
                                  double[:, ::1] delta,
-                                 double[::1] intercept,
                                  double[:, :, :, ::1] omega,
                                  int i):
     cdef size_t t, k, j, p, q
@@ -41,7 +40,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                 lmbda[k, p] * X[t, j, p] * (
                                     Y[k, t, i, j] - 0.5 -
                                         omega[k, t, i, j] * (
-                                            intercept[k] + delta[k, i] + delta[k, j])))
+                                             delta[k, i] + delta[k, j])))
 
                             for q in range(p + 1):
                                 eta2[t, p, q] += omega[k, t, i, j] * (
@@ -146,68 +145,8 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
             np.linalg.pinv(
                 F_inv + B[t] + psi_inv[t] - # psi_star^{-1}
                     (sigma_prec ** 2) * sigma_star[t-1]))
-        #if t == 1:
-        #    # calculate backwards message variables
-        #    psi_inv[t-1] = F_init_inv + B[t] + psi_inv[t]
-        #    psi[t-1] = np.linalg.pinv(psi_inv[t-1])
-        #    eta[t-1] = np.dot(psi[t-1], A[t] + np.dot(psi_inv[t], eta[t]))
-
-        #    # update marginals and cross-covariances
-        #    cov[t-1] = np.linalg.pinv(sigma_inv[t-1] + psi_inv[t-1])
-        #    cross_cov[t-1] = tau_prec * np.dot(sigma_star[t-1],
-        #        np.linalg.pinv(
-        #            F_init_inv + B[t] + psi_inv[t] - # psi_star^{-1}
-        #                pow(tau_prec, 2) * sigma_star[t-1]))
-        #    mean[t-1] = np.dot(cov[t-1],
-        #        np.dot(sigma_inv[t-1], mu[t-1]) +
-        #            np.dot(psi_inv[t-1], eta[t-1]))
-        # calculate backwards message variables
-
-        #if t == 1:
-        #    #cov[t-1] = np.linalg.pinv(sigma_inv[t-1] + psi_inv[t-1])
-        #    #cross_cov[t-1] = tau_prec * np.dot(sigma_star[t-1],
-        #    #    np.linalg.pinv(
-        #    #        F_init_inv + B[t] + psi_inv[t] - # psi_star^{-1}
-        #    #            pow(tau_prec, 2) * sigma_star[t-1]))
-        #    #mean[t-1] = np.dot(cov[t-1],
-        #    #    np.dot(sigma_inv[t-1], mu[t-1]) +
-        #    #        np.dot(psi_inv[t-1], eta[t-1]))
-        #    cross_cov[t-1] = sigma_prec * np.dot(sigma_star[t-1],
-        #        np.linalg.pinv(
-        #            F_inv + B[t] + psi_inv[t] - # psi_star^{-1}
-        #                pow(sigma_prec, 2) * sigma_star[t-1]))
-        #else:
-        #    #cov[t-1] = np.linalg.pinv(sigma_inv[t-1] + psi_inv[t-1])
-        #    cross_cov[t-1] = sigma_prec * np.dot(sigma_star[t-1],
-        #        np.linalg.pinv(
-        #            F_inv + B[t] + psi_inv[t] - # psi_star^{-1}
-        #                pow(sigma_prec, 2) * sigma_star[t-1]))
-        #    #mean[t-1] = np.dot(cov[t-1],
-        #    #    np.dot(sigma_inv[t-1], mu[t-1]) +
-        #    #        np.dot(psi_inv[t-1], eta[t-1]))
 
     return mean, cov, cross_cov
-
-
-def update_latent_position_single(const double[:, :, :, ::1] Y,
-                                  np.ndarray[double, ndim=3, mode='c'] X,
-                                  np.ndarray[double, ndim=4, mode='c'] X_sigma,
-                                  np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
-                                  double[:, ::1] lmbda,
-                                  double[:, :, ::1] lmbda_sigma,
-                                  double[::1] intercept,
-                                  double[:, :, :, ::1] omega,
-                                  double tau_prec,
-                                  double sigma_prec,
-                                  size_t i):
-    cdef np.ndarray[double, ndim=2, mode='c'] A
-    cdef np.ndarray[double, ndim=3, mode='c'] B
-
-    A, B = calculate_natural_parameters(
-        Y, X, X_sigma, lmbda, lmbda_sigma, intercept, omega, i)
-
-    X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
-        A, B, tau_prec, sigma_prec)
 
 
 def update_latent_positions(const double[:, :, :, ::1] Y,
@@ -217,7 +156,6 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] lmbda_sigma,
                             double[:, ::1] delta,
-                            double[::1] intercept,
                             double[:, :, :, ::1] omega,
                             double tau_prec,
                             double sigma_prec):
@@ -228,7 +166,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
-            Y, X, X_sigma, lmbda, lmbda_sigma, delta, intercept, omega, i)
+            Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)

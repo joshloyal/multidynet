@@ -13,7 +13,6 @@ cimport numpy as np
 def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, ::1] lmbda,
-                                 double[:] intercept,
                                  double[:, ::1] delta,
                                  double[:, :, :, ::1] omega,
                                  double delta_var_prior,
@@ -33,7 +32,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
             if j != i and Y[k, t, i, j] != -1.0:
                 eta2 += omega[k, t, i, j]
 
-                tmp = intercept[k] + delta[k, j]
+                tmp = delta[k, j]
                 for p in range(n_features):
                     tmp += lmbda[k, p] * X[t, i, p] * X[t, j, p]
                 eta1 += Y[k, t, i, j] - 0.5 - omega[k, t, i, j] * tmp
@@ -44,7 +43,6 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
 def update_deltas(const double[:, :, :, ::1] Y,
                   double[:, :, ::1] X,
                   double[:, ::1] lmbda,
-                  double[:] intercept,
                   np.ndarray[double, ndim=2, mode='c'] delta,
                   np.ndarray[double, ndim=2, mode='c'] delta_sigma,
                   double[:, :, :, ::1] omega,
@@ -60,7 +58,7 @@ def update_deltas(const double[:, :, :, ::1] Y,
     for k in range(n_layers):
         for i in range(n_nodes):
             eta1, eta2 = calculate_natural_parameters(
-                Y, X, lmbda, intercept, delta, omega, delta_var_prior, k, i)
+                Y, X, lmbda, delta, omega, delta_var_prior, k, i)
 
             delta_sigma[k, i] = 1. / eta2
             delta[k, i] = delta_sigma[k, i] * eta1
