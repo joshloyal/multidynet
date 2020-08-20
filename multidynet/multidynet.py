@@ -377,3 +377,4 @@ class DynamicMultilayerNetworkLSM(object):
         self.d_sigma_sq_ = model.d_sigma_sq_
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
         self.logp_ = model.logp_
+        self.converged_ = model.converged_
