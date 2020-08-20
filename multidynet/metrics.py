@@ -56,23 +56,23 @@ def score_latent_space(X_true, X_pred):
     for perm in itertools.permutations(np.arange(n_features)):
         X = X_pred[..., perm]
 
-    # loops through single feature flips
-    for p in range(n_features):
-        Xp = X.copy()
-        Xp[..., p] = -X[..., p]
-        mse = np.mean((X_true - Xp) ** 2)
-        if mse < best_mse:
-            best_mse = mse
-            best_perm = perm
-
-    # loop through all feature combinations
-    for k in range(2, n_features + 1):
-        for combo in itertools.combinations(range(n_features), k):
+        # loops through single feature flips
+        for p in range(n_features):
             Xp = X.copy()
-            Xp[..., combo] = -X[..., combo]
+            Xp[..., p] = -X[..., p]
             mse = np.mean((X_true - Xp) ** 2)
             if mse < best_mse:
                 best_mse = mse
                 best_perm = perm
+
+        # loop through all feature combinations
+        for k in range(2, n_features + 1):
+            for combo in itertools.combinations(range(n_features), k):
+                Xp = X.copy()
+                Xp[..., combo] = -X[..., combo]
+                mse = np.mean((X_true - Xp) ** 2)
+                if mse < best_mse:
+                    best_mse = mse
+                    best_perm = perm
 
     return best_mse, best_perm
