@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 
 from sklearn.metrics import roc_auc_score
@@ -42,3 +44,35 @@ def calculate_auc(Y_true, Y_pred, test_indices=None):
             y_pred.extend(y_pred_vec[subset])
 
     return roc_auc_score(y_true, y_pred)
+
+
+def calculate_mse(X_true, X_pred):
+    """The estimated latent space is still invariant to column permutations and
+    sign flips. To fix these we do an exhaustive search over all permutations
+    and sign flips and return the value with the lowest MSE."""
+    n_features = X_true.shape[2]
+    best_mse = np.inf
+    best_perm = None
+    for perm in itertools.permutations(np.arange(n_features)):
+        X = X_pred[..., perm]
+
+    # loops through single feature flips
+    for p in range(n_features):
+        Xp = X.copy()
+        Xp[..., p] = -X[..., p]
+        mse = np.mean((X_true - Xp) ** 2)
+        if mse < best_mse:
+            best_mse = mse
+            best_perm = perm
+
+    # loop through all feature combinations
+    for k in range(2, n_features + 1):
+        for combo in itertools.combinations(range(n_features), k):
+            Xp = X.copy()
+            Xp[..., combo] = -X[..., combo]
+            mse = np.mean((X_true - Xp) ** 2)
+            if mse < best_mse:
+                best_mse = mse
+                best_perm = perm
+
+    return best_mse, best_perm
