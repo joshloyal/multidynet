@@ -9,8 +9,6 @@
 import numpy as np
 cimport numpy as np
 
-from libc.math cimport pow
-
 
 def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
@@ -34,21 +32,21 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
     for t in range(n_time_steps):
         for k in range(n_layers):
             for j in range(n_nodes):
-                    if j != i and Y[k, t, i, j] != -1.0:
-                        for p in range(n_features):
-                            eta1[t, p] += (
-                                lmbda[k, p] * X[t, j, p] * (
-                                    Y[k, t, i, j] - 0.5 -
-                                        omega[k, t, i, j] * (
-                                             delta[k, i] + delta[k, j])))
+                if j != i and Y[k, t, i, j] != -1.0:
+                    for p in range(n_features):
+                        eta1[t, p] += (
+                            lmbda[k, p] * X[t, j, p] * (
+                                Y[k, t, i, j] - 0.5 -
+                                    omega[k, t, i, j] * (
+                                         delta[k, i] + delta[k, j])))
 
-                            for q in range(p + 1):
-                                eta2[t, p, q] += omega[k, t, i, j] * (
-                                    (lmbda_sigma[k, p, q] +
-                                        lmbda[k, p] * lmbda[k, q]) *
-                                    (X_sigma[t, j, p, q] +
-                                        X[t, j, p] * X[t, j, q]))
-                                eta2[t, q, p] = eta2[t, p, q]
+                        for q in range(p + 1):
+                            eta2[t, p, q] += omega[k, t, i, j] * (
+                                (lmbda_sigma[k, p, q] +
+                                    lmbda[k, p] * lmbda[k, q]) *
+                                (X_sigma[t, j, p, q] +
+                                    X[t, j, p] * X[t, j, q]))
+                            eta2[t, q, p] = eta2[t, p, q]
 
     return np.asarray(eta1), np.asarray(eta2)
 

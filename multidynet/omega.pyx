@@ -61,7 +61,7 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
     cdef size_t n_time_steps = omega.shape[1]
     cdef size_t n_nodes = omega.shape[2]
     cdef size_t n_features = lmbda.shape[1]
-    cdef size_t k, t, i, j, p = 0
+    cdef size_t k, t, i, j, p
     cdef double loglik = 0.
     cdef double psi, psi_sq = 0.
 

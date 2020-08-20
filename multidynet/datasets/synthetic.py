@@ -10,7 +10,6 @@ from sklearn.utils import check_random_state
 __all__ = ['simple_dynamic_multilayer_network', 'simple_dynamic_network']
 
 
-
 def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
                                                  random_state=None):
     rng = check_random_state(random_state)
@@ -40,30 +39,8 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
     return Y
 
 
-def network_from_dynamic_latent_space(X, intercept, random_state=None):
-    rng = check_random_state(random_state)
-
-    n_time_steps, n_nodes, _ = X.shape
-    Y = np.zeros((n_time_steps, n_nodes, n_nodes), dtype=np.float64)
-    probas = np.zeros(
-        (n_time_steps, n_nodes, n_nodes), dtype=np.float64)
-    for t in range(n_time_steps):
-        # sample the adjacency matrix
-        eta = intercept + np.dot(X[t], X[t].T)
-        probas[t] = expit(eta)
-
-        Y[t] = rng.binomial(1, probas[t]).astype(np.int)
-
-        # make symmetric
-        Y[t] = np.tril(Y[t], k=-1)
-        Y[t] += Y[t].T
-
-    return Y
-
-
-
 def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
-                                      n_features=2, tau_sq=1.0, sigma_sq=1.0,
+                                      n_features=2, tau_sq=1.0, sigma_sq=0.05,
                                       lmbda_scale=1.0,
                                       lmbda=None,
                                       assortative_reference=True,
@@ -101,9 +78,31 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
     return Y, X, lmbda, delta
 
 
+def network_from_dynamic_latent_space(X, delta, random_state=None):
+    rng = check_random_state(random_state)
+
+    n_time_steps, n_nodes, _ = X.shape
+    Y = np.zeros((n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    probas = np.zeros(
+        (n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    deltat = delta.reshape(-1, 1)
+    for t in range(n_time_steps):
+        # sample the adjacency matrix
+        eta = np.add(deltat, deltat.T) + np.dot(X[t], X[t].T)
+        probas[t] = expit(eta)
+
+        Y[t] = rng.binomial(1, probas[t]).astype(np.int)
+
+        # make symmetric
+        Y[t] = np.tril(Y[t], k=-1)
+        Y[t] += Y[t].T
+
+    return Y
+
+
 def simple_dynamic_network(n_nodes=100, n_time_steps=4,
-                           n_features=2, tau_sq=1.0, sigma_sq=1.0,
-                           intercept=1.0, random_state=42):
+                           n_features=2, tau_sq=1.0, sigma_sq=0.05,
+                           random_state=42):
     rng = check_random_state(random_state)
 
     # construct latent features
@@ -112,8 +111,11 @@ def simple_dynamic_network(n_nodes=100, n_time_steps=4,
     for t in range(1, n_time_steps):
         X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
 
+    # degree effects
+    delta = rng.randn(n_nodes)
+
     # construct the network
     Y = network_from_dynamic_latent_space(
-        X, intercept, random_state=rng)
+        X, delta, random_state=rng)
 
-    return Y, X, intercept
+    return Y, X, delta

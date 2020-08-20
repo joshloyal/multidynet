@@ -2,8 +2,7 @@ import numpy as np
 
 
 def update_tau_sq(Y, X, X_sigma, a, b):
-    n_nodes = Y.shape[2]
-    n_features = X.shape[2]
+    _, n_nodes, n_features = X.shape
 
     a_tau_sq = a + n_nodes * n_features
     b_tau_sq = (b +
@@ -14,9 +13,7 @@ def update_tau_sq(Y, X, X_sigma, a, b):
 
 
 def update_sigma_sq(Y, X, X_sigma, X_cross_cov, c, d):
-    n_time_steps = Y.shape[1]
-    n_nodes = Y.shape[2]
-    n_features = X.shape[2]
+    n_time_steps, n_nodes, n_features = X.shape
 
     c_sigma_sq = (c +
         n_nodes * (n_time_steps - 1) * n_features)

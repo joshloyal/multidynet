@@ -6,7 +6,6 @@ import scipy.sparse as sp
 from joblib import Parallel, delayed
 from scipy.special import logit, gammainc, expit
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.metrics import roc_auc_score
 from sklearn.utils import check_array, check_random_state
 from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
@@ -16,7 +15,6 @@ from .lds import update_latent_positions
 from .lmbdas import update_lambdas
 from .deltas import update_deltas
 from .variances import update_tau_sq, update_sigma_sq
-from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
 
 
@@ -154,7 +152,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_loglik = loglik
 
-        # coordinate descent
+        # coordinate ascent
 
         # omega updates
         loglik = update_omega(
