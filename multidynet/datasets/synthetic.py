@@ -36,7 +36,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
             Y[k, t] = np.tril(Y[k, t], k=-1)
             Y[k, t] += Y[k, t].T
 
-    return Y
+    return Y, probas
 
 
 def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
@@ -72,10 +72,10 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
     delta = rng.randn(n_layers, n_nodes)
 
     # construct the network
-    Y = multilayer_network_from_dynamic_latent_space(
+    Y, probas = multilayer_network_from_dynamic_latent_space(
         X, lmbda, delta, random_state=rng)
 
-    return Y, X, lmbda, delta
+    return Y, X, lmbda, delta, probas
 
 
 def network_from_dynamic_latent_space(X, delta, random_state=None):
@@ -97,7 +97,7 @@ def network_from_dynamic_latent_space(X, delta, random_state=None):
         Y[t] = np.tril(Y[t], k=-1)
         Y[t] += Y[t].T
 
-    return Y
+    return Y, probas
 
 
 def simple_dynamic_network(n_nodes=100, n_time_steps=4,
@@ -118,4 +118,4 @@ def simple_dynamic_network(n_nodes=100, n_time_steps=4,
     Y = network_from_dynamic_latent_space(
         X, delta, random_state=rng)
 
-    return Y, X, delta
+    return Y, X, delta, probas

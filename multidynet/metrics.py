@@ -46,7 +46,7 @@ def calculate_auc(Y_true, Y_pred, test_indices=None):
     return roc_auc_score(y_true, y_pred)
 
 
-def calculate_mse(X_true, X_pred):
+def score_latent_space(X_true, X_pred):
     """The estimated latent space is still invariant to column permutations and
     sign flips. To fix these we do an exhaustive search over all permutations
     and sign flips and return the value with the lowest MSE."""
