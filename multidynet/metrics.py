@@ -56,6 +56,12 @@ def score_latent_space(X_true, X_pred):
     for perm in itertools.permutations(np.arange(n_features)):
         X = X_pred[..., perm]
 
+        # no flip
+        mse = np.mean((X_true - X_pred) ** 2)
+        if mse < best_mse:
+            best_mse = mse
+            best_perm = perm
+
         # loops through single feature flips
         for p in range(n_features):
             Xp = X.copy()
@@ -76,3 +82,57 @@ def score_latent_space(X_true, X_pred):
                     best_perm = perm
 
     return best_mse, best_perm
+
+
+def score_latent_space_t(X_true, X_pred):
+    """The estimated latent space is still invariant to column permutations and
+    sign flips. To fix these we do an exhaustive search over all permutations
+    and sign flips and return the value with the lowest MSE."""
+    n_features = X_true.shape[1]
+    best_mse = np.inf
+    best_perm = None
+    for perm in itertools.permutations(np.arange(n_features)):
+        X = X_pred[..., perm]
+
+        # no flip
+        mse = np.mean((X_true - X_pred) ** 2)
+        if mse < best_mse:
+            best_mse = mse
+            best_perm = perm
+
+        # loops through single feature flips
+        for p in range(n_features):
+            Xp = X.copy()
+            Xp[..., p] = -X[..., p]
+            mse = np.mean((X_true - Xp) ** 2)
+            if mse < best_mse:
+                best_mse = mse
+                best_perm = perm
+
+        # loop through all feature combinations
+        for k in range(2, n_features + 1):
+            for combo in itertools.combinations(range(n_features), k):
+                Xp = X.copy()
+                Xp[..., combo] = -X[..., combo]
+                mse = np.mean((X_true - Xp) ** 2)
+                if mse < best_mse:
+                    best_mse = mse
+                    best_perm = perm
+
+    return best_mse, best_perm
+
+
+def score_latent_space_individual(X_true, X_pred):
+    """The estimated latent space is still invariant to column permutations and
+    sign flips. To fix these we do an exhaustive search over all permutations
+    and sign flips and return the value with the lowest MSE.
+
+    NOTE: This function allows the flips and perms to be different over all
+    time-points
+    """
+    mse = 0
+    for t in range(X_true.shape[0]):
+        mse_t, perm = score_latent_space_t(X_true[t], X_pred[t])
+        mse += mse_t
+
+    return mse / X_true.shape[0], perm

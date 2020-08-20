@@ -94,10 +94,10 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # omega is initialized by drawing from the prior?
     omega = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
-    # intialize latent space randomly
+    # initialize latent space randomly
     X = rng.randn(n_time_steps, n_nodes, n_features)
 
-    # intialize to marginal covariances
+    # initialize to marginal covariances
     sigma_init = np.eye(n_features)
     X_sigma = np.tile(
         sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
@@ -107,7 +107,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     X_cross_cov = np.tile(
         cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
-    # intialize to prior means
+    # initialize to prior means
     lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
     lmbda[0] = (
         2 * (lambda_odds_prior / (1. + lambda_odds_prior)) - 1)
