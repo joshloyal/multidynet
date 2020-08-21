@@ -7,7 +7,8 @@ from scipy.special import expit
 from sklearn.utils import check_random_state
 
 
-__all__ = ['simple_dynamic_multilayer_network', 'simple_dynamic_network']
+__all__ = ['simple_dynamic_multilayer_network', 'simple_dynamic_network',
+           'dynamic_multilayer_network']
 
 
 def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
@@ -70,6 +71,33 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
 
     # degree effects
     delta = rng.randn(n_layers, n_nodes)
+
+    # construct the network
+    Y, probas = multilayer_network_from_dynamic_latent_space(
+        X, lmbda, delta, random_state=rng)
+
+    return Y, X, lmbda, delta, probas
+
+
+def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
+                               n_features=2, tau_sq=4.0, sigma_sq=0.05,
+                               random_state=42):
+    rng = check_random_state(random_state)
+
+    # construct latent features
+    X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
+    X[0] = np.sqrt(tau_sq) * rng.randn(n_nodes, n_features)
+    for t in range(1, n_time_steps):
+        X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
+
+    # sample assortativity parameters from a U(-2, 2)
+    lmbda = np.zeros((n_layers, n_features))
+    lmbda[0] = rng.choice([-1, 1], size=n_features)
+    lmbda[1:] = rng.uniform(
+        -2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+
+    # sample degree effects from a U(-4, 4)
+    delta = rng.uniform(-4, 4, n_layers*n_nodes).reshape(n_layers, n_nodes)
 
     # construct the network
     Y, probas = multilayer_network_from_dynamic_latent_space(
