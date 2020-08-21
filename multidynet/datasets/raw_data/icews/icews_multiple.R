@@ -57,10 +57,9 @@ filter_relation <- function(type = "quadclass", n_countries = 50) {
                 G <- igraph::graph_from_edgelist(as.matrix(edgelist))
                 G <- igraph::simplify(G)
                 G <- G + vertex(countries[!countries %in% V(G)$name])
+                G <- as.undirected(G)
                 Y[k, t, ,] <- as.matrix(
                     igraph::as_adjacency_matrix(G))[countries, countries]
-                G <- as.undirected(G)
-
                 t <- t + 1
             }
         }
