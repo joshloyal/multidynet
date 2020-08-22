@@ -20,3 +20,9 @@ df['node_a'] = encoder.transform(df['node_a']) + 1  # make one indexed
 df['node_b'] = encoder.transform(df['node_b']) + 1
 
 df.to_csv('edgelist.csv', index=False)
+
+# meta data
+df = pd.read_csv('metadata_primaryschool.txt', sep="\t", header=None,
+                 names=['node_id', 'class', 'gender'])
+df['node_id'] = encoder.transform(df['node_id'])
+df.to_csv('covariates.csv', index=False)

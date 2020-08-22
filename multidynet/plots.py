@@ -11,6 +11,7 @@ from matplotlib.colors import ListedColormap, to_hex
 from matplotlib.patches import Ellipse, Rectangle, FancyArrowPatch
 from scipy.stats import norm
 from scipy.special import expit
+from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import check_random_state
 from dynetlsm.plots import get_colors
 
@@ -58,7 +59,7 @@ def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
     return ellipses
 
 
-def plot_network(Y, X, tau_sq=None, normalize=True, figsize=(8, 6),
+def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
                  node_color='orangered',
                  alpha=1.0, size=300, edge_width=0.25, node_labels=None,
                  font_size=12, with_labels=False):
@@ -76,8 +77,15 @@ def plot_network(Y, X, tau_sq=None, normalize=True, figsize=(8, 6),
     else:
         labels = None
 
+    if z is None:
+        node_color = r.ravel() / r.min()
+    else:
+        encoder = LabelEncoder().fit(z)
+        colors = get_colors(z.ravel())
+        node_color = colors[encoder.transform(z)]
+
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
-                     node_color=r.ravel() / r.min(),
+                     node_color=node_color,
                      node_size=size,
                      alpha=alpha,
                      cmap=cmap,
@@ -111,11 +119,12 @@ def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
     if normalize:
         X = X / r
 
+    encoder = LabelEncoder().fit(z)
     colors = get_colors(z.ravel())
 
     G = nx.from_numpy_array(Y)
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
-                     node_color=colors[z],
+                     node_color=colors[encoder.transform(z)],
                      node_size=size,
                      alpha=alpha,
                      with_labels=with_labels,

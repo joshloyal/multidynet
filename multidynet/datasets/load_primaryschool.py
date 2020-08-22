@@ -1,5 +1,6 @@
-import numpy as np
 import joblib
+import numpy as np
+import pandas as pd
 
 from os.path import dirname, join
 
@@ -11,8 +12,14 @@ def load_primaryschool():
     module_path = dirname(__file__)
     file_path = join(module_path, 'raw_data')
 
+    # adjacency matrices
     file_name = join(file_path, 'primaryschool', 'numpy_data',
                      'primaryschool.gz')
     Y = joblib.load(open(file_name, 'rb'))
 
-    return np.ascontiguousarray(Y)
+    # covariates
+    file_name = join(file_path, 'primaryschool', 'numpy_data',
+                     'covariates.csv')
+    X = pd.read_csv(file_name).values
+
+    return np.ascontiguousarray(Y), X[:, 1], X[:, 2]
