@@ -90,28 +90,29 @@ def score_latent_space_t(X_true, X_pred, perm):
     and sign flips and return the value with the lowest MSE."""
     n_features = X_true.shape[1]
     X = X_pred[..., perm]
+    denom = np.sum(X_true ** 2)
 
     # no flip
-    best_mse = np.mean((X_true - X) ** 2)
+    best_rel = np.sum((X_true - X) ** 2) / denom
 
     # loops through single feature flips
     for p in range(n_features):
         Xp = X.copy()
         Xp[..., p] = -X[..., p]
-        mse = np.mean((X_true - Xp) ** 2)
-        if mse < best_mse:
-            best_mse = mse
+        rel = np.sum((X_true - Xp) ** 2) / denom
+        if rel < best_rel:
+            best_rel = rel
 
     # loop through all feature combinations
     for k in range(2, n_features + 1):
         for combo in itertools.combinations(range(n_features), k):
             Xp = X.copy()
             Xp[..., combo] = -X[..., combo]
-            mse = np.mean((X_true - Xp) ** 2)
-            if mse < best_mse:
-                best_mse = mse
+            rel = np.sum((X_true - Xp) ** 2) / denom
+            if rel < best_rel:
+                best_rel = rel
 
-    return best_mse
+    return best_rel
 
 
 def score_latent_space_individual(X_true, X_pred):
@@ -123,15 +124,15 @@ def score_latent_space_individual(X_true, X_pred):
     time-points
     """
     n_time_steps, _, n_features = X_true.shape
-    best_mse = np.inf
+    best_rel = np.inf
     best_perm = None
     for perm in itertools.permutations(np.arange(n_features)):
-        mse = 0
+        rel = 0
         for t in range(X_true.shape[0]):
-            mse += score_latent_space_t(X_true[t], X_pred[t], perm)
-        mse /= n_time_steps
-        if mse < best_mse:
-            best_mse = mse
+            rel += score_latent_space_t(X_true[t], X_pred[t], perm)
+        rel /= n_time_steps
+        if rel < best_rel:
+            best_rel = rel
             best_perm = perm
 
-    return best_mse, best_perm
+    return best_rel, best_perm
