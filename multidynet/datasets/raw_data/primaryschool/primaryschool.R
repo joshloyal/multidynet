@@ -5,11 +5,11 @@ library(tidyverse)
 
 data <- read_csv('edgelist.csv')
 
-n_time_steps <- 10
+n_time_steps <- 8
 n_layers <- 2
 n_nodes <- 242
 k_offset <- 0
-t_offset <- 7
+t_offset <- 8
 
 unique_nodes <- union(data$node_a, data$node_b)
 

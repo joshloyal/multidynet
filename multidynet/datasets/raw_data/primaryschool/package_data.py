@@ -5,7 +5,7 @@ import numpy as np
 
 n_nodes = 242
 n_layers = 2
-n_time_steps = 10
+n_time_steps = 8
 
 Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
