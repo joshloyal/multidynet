@@ -14,7 +14,7 @@ def load_primaryschool():
 
     # adjacency matrices
     file_name = join(file_path, 'primaryschool', 'numpy_data',
-                     'primaryschool.gz')
+                     'primaryschool30.gz')
     Y = joblib.load(open(file_name, 'rb'))
 
     # covariates
