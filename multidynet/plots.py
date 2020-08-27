@@ -84,6 +84,13 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
         colors = get_colors(z.ravel())
         node_color = colors[encoder.transform(z)]
 
+        # add a legend
+        for i in range(encoder.classes_.shape[0]):
+            ax.plot([0], [0], 'o', c=colors[i], label=encoder.classes_[i],
+                    markeredgecolor='w', zorder=0)
+        ax.plot([0], [0], 'o', markeredgecolor='w', c='w', zorder=0)
+
+
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
                      node_color=node_color,
                      node_size=size,
@@ -106,6 +113,9 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
         normal_contour([0, 0], tau_sq * np.eye(X.shape[1]), n_std=[1],
                        linestyle='--', edgecolor='k',
                        facecolor='none', zorder=1, ax=ax)
+
+    if z is not None:
+        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6)
 
     return ax
 
@@ -393,3 +403,44 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
     sns.set_style('white')
 
     return axes
+
+
+def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
+                            time_labels=None, stat_label='Statistic',
+                            layer_labels=None, figsize=(16, 10),
+                            xlabel='Time'):
+    n_layers, n_time_steps, _ = stat_sim.shape
+
+    if ncol is None:
+        ncol = n_layers
+    fig, axes = plt.subplots(nrow, ncol, sharey=True, figsize=figsize)
+
+    if time_labels is None:
+        time_labels = np.arange(n_time_steps) + 1
+
+    if layer_labels is None:
+        layer_labels = np.arange(n_layers) + 1
+
+    for k, ax in enumerate(axes.flat):
+        data = pd.DataFrame()
+        for t in range(n_time_steps):
+            data[time_labels[t]] = stat_sim[k, t]
+
+        if stat_obs is not None:
+            ax.plot(np.arange(n_time_steps), stat_obs[k], 'o--', c='k')
+        sns.boxplot(x='variable', y='value', data=pd.melt(data),
+                    ax=ax, color='white')
+
+        ax.set_xticklabels(time_labels[::2], rotation=45, fontsize=12)
+        plt.setp(ax.artists, edgecolor='black')
+        plt.setp(ax.lines, color='black')
+
+        ax.set_xticks([i for i in range(0, n_time_steps, 2)])
+        ax.tick_params(axis='y', labelsize=12)
+
+        ax.grid(axis='x')
+        ax.set_title(layer_labels[k], fontsize=24)
+        ax.set_xlabel(xlabel, fontsize=16)
+        ax.set_ylabel(stat_label, fontsize=16)
+
+    return fig, axes

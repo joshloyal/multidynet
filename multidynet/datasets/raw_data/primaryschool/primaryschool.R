@@ -10,7 +10,7 @@ n_layers <- 2
 n_nodes <- 242
 k_offset <- 0
 t_offset <- 8
-n_blocks <- 2
+n_blocks <- 3
 
 unique_nodes <- union(data$node_a, data$node_b)
 
