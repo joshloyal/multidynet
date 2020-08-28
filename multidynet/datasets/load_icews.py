@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import joblib
 
 from os.path import dirname, join
@@ -22,4 +23,8 @@ def load_icews():
     layer_labels = ['Verbal Cooperation', 'Material Cooperation',
                     'Verbal Conflict', 'Material Conflict']
 
-    return np.ascontiguousarray(Y), countries, layer_labels
+    time_labels = pd.date_range(
+        start='January 01 2009', end='December 31 2016', freq='M')
+    time_labels = time_labels.strftime('%b %Y')
+
+    return np.ascontiguousarray(Y), countries, layer_labels, time_labels

@@ -1,5 +1,7 @@
 import numbers
+import tempfile
 
+import imageio
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -16,7 +18,7 @@ from sklearn.utils import check_random_state
 from dynetlsm.plots import get_colors
 
 
-__all__ = ['plot_network', 'plot_network_communities',
+__all__ = ['plot_network', 'make_network_animation',
            'plot_sociability', 'plot_lambda', 'plot_node_trajectories',
            'plot_pairwise_probabilities']
 
@@ -117,33 +119,54 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
     if z is not None:
         ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6)
 
-    return ax
+    return fig, ax
 
 
-def plot_network_communities(Y, X, z, normalize=True, figsize=(8, 6),
-                             alpha=1.0, size=300, edge_width=0.25,
-                             with_labels=False):
-    fig, ax = plt.subplots(figsize=figsize)
+def make_network_animation(filename, Y, X, k=0, z=None, tau_sq=None, normalize=True,
+                           figsize=(8, 6), node_color='orangered',
+                           alpha=1.0, size=300, edge_width=0.25,
+                           node_labels=None, font_size=12, with_labels=False,
+                           layer_labels=None, time_labels=None,
+                           title_fmt='{}, {}', border=0.5, duration=1):
 
-    r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
-    if normalize:
-        X = X / r
+    # XXX: hack to shut off plotting within a jupyter notebook...
+    plt.ioff()
 
-    encoder = LabelEncoder().fit(z)
-    colors = get_colors(z.ravel())
+    n_layers, n_time_steps, _, _ = Y.shape
 
-    G = nx.from_numpy_array(Y)
-    nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
-                     node_color=colors[encoder.transform(z)],
-                     node_size=size,
-                     alpha=alpha,
-                     with_labels=with_labels,
-                     ax=ax)
-    ax.collections[0].set_edgecolor('white')
-    ax.axis('equal')
-    ax.axis('off')
+    if layer_labels is None:
+        layer_labels =  ["k = {}".format(k) for k in range(n_layers)]
 
-    return ax
+    if time_labels is None:
+        time_labels = ["t = {}".format(t) for t in range(n_time_steps)]
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        x_max, y_max = X.max(axis=(0, 1))
+        x_min, y_min = X.min(axis=(0, 1))
+
+        pngs = []
+        for t in range(Y.shape[1]):
+            fig, ax = plot_network(Y[k, t], X[t], z=z, tau_sq=tau_sq,
+                normalize=normalize, figsize=figsize, node_color=node_color,
+                alpha=alpha, size=size, edge_width=edge_width,
+                node_labels=node_labels, font_size=font_size,
+                with_labels=with_labels,)
+            ax.set_title(title_fmt.format(layer_labels[k], time_labels[t]))
+            ax.set_xlim(x_min - border, x_max + border)
+            ax.set_ylim(y_min - border, y_max + border)
+
+            fname = tempfile.TemporaryFile(dir=tempdir, suffix='.png')
+            fig.savefig(fname, dpi=100)
+            fname.seek(0)
+            plt.close(fig)  # necessary to free memory
+            pngs.append(fname)
+
+        images = []
+        for png in pngs:
+            images.append(imageio.imread(png))
+        imageio.mimsave(filename, images, duration=duration)
+
+    plt.ion()
 
 
 def plot_sociability(model, k=0, node_labels=None, layer_label=None, ax=None,
@@ -381,7 +404,7 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
             if k == 0:
                 txt = '{}'.format(lmbda)
             else:
-                txt = '{:.2f} ({:.2f}, {:.2f})'.format(
+                txt = '{:.3f} ({:.3f}, {:.3f})'.format(
                     lmbda, lmbda - xerr[k], lmbda + xerr[k])
             ax.text(lmbda, k - 0.1, txt, horizontalalignment=align)
 
@@ -407,6 +430,7 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
 
 def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
                             time_labels=None, stat_label='Statistic',
+                            time_step=1,
                             layer_labels=None, figsize=(16, 10),
                             xlabel='Time'):
     n_layers, n_time_steps, _ = stat_sim.shape
@@ -431,11 +455,11 @@ def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
         sns.boxplot(x='variable', y='value', data=pd.melt(data),
                     ax=ax, color='white')
 
-        ax.set_xticklabels(time_labels[::2], rotation=45, fontsize=12)
+        ax.set_xticklabels(time_labels[::time_step], rotation=45, fontsize=12)
         plt.setp(ax.artists, edgecolor='black')
         plt.setp(ax.lines, color='black')
 
-        ax.set_xticks([i for i in range(0, n_time_steps, 2)])
+        ax.set_xticks([i for i in range(0, n_time_steps, time_step)])
         ax.tick_params(axis='y', labelsize=12)
 
         ax.grid(axis='x')
