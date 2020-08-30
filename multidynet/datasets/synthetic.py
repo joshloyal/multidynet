@@ -143,7 +143,7 @@ def simple_dynamic_network(n_nodes=100, n_time_steps=4,
     delta = rng.randn(n_nodes)
 
     # construct the network
-    Y = network_from_dynamic_latent_space(
+    Y, probas = network_from_dynamic_latent_space(
         X, delta, random_state=rng)
 
     return Y, X, delta, probas

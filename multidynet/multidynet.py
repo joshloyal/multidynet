@@ -323,6 +323,12 @@ class DynamicMultilayerNetworkLSM(object):
         Y = check_array(Y, order='C', dtype=np.float64,
                         ensure_2d=False, allow_nd=True, copy=False)
 
+        if Y.ndim == 3:
+            raise ValueError(
+                "Y.ndim == {}, when it should be 4. "
+                "If there is only a single layer, then reshape Y with "
+                "Y = np.expand_dims(Y, axis=0) and re-fit.".format(Y.ndim))
+
         random_state = check_random_state(self.random_state)
 
         # run the elbo optimization over different initializations

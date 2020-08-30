@@ -425,7 +425,7 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
 
     sns.set_style('white')
 
-    return axes
+    return fig, axes
 
 
 def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,

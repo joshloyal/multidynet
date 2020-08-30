@@ -32,7 +32,7 @@ def load_primaryschool():
     X = pd.read_csv(file_name).values
 
     # labels
-    layer_labels = ['Monday', 'Friday']
+    layer_labels = ['Thursday', 'Friday']
 
     time_labels = [
         "8:30 to 9:20", "9:20 to 9:40", "9:40 to 10:00", "10:00 to 10:20",

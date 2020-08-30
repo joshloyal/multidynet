@@ -13,6 +13,8 @@ cimport numpy as np
 def calculate_natural_parameters(double[:, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
+                                 double[::1] lmbda,
+                                 double[:, ::1] lmbda_sigma,
                                  double[:] delta,
                                  double[:, :, ::1] omega,
                                  int i):
@@ -31,14 +33,16 @@ def calculate_natural_parameters(double[:, :, ::1] Y,
             if j != i and Y[t, i, j] != -1.0:
                 for p in range(n_features):
                     eta1[t, p] += (
-                        X[t, j, p] * (
+                        lmbda[p] * X[t, j, p] * (
                             Y[t, i, j] - 0.5 -
                                 omega[t, i, j] * (delta[i] + delta[j])))
 
                     for q in range(p + 1):
                         eta2[t, p, q] += omega[t, i, j] * (
-                            X_sigma[t, j, p, q] +
-                                X[t, j, p] * X[t, j, q])
+                            (lmbda_sigma[p, q] +
+                                lmbda[p] * lmbda[q]) *
+                            (X_sigma[t, j, p, q] +
+                                X[t, j, p] * X[t, j, q]))
                         eta2[t, q, p] = eta2[t, p, q]
 
     return eta1, eta2
@@ -144,6 +148,8 @@ def update_latent_positions(double[:, :, ::1] Y,
                             np.ndarray[double, ndim=3, mode='c'] X,
                             np.ndarray[double, ndim=4, mode='c'] X_sigma,
                             np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
+                            double[::1] lmbda,
+                            double[:, ::1] lmbda_sigma,
                             double[:] delta,
                             double[:, :, ::1] omega,
                             double tau_prec,
@@ -155,7 +161,7 @@ def update_latent_positions(double[:, :, ::1] Y,
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
-            Y, X, X_sigma, delta, omega, i)
+            Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)
