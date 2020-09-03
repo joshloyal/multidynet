@@ -65,7 +65,8 @@ def train_test_split(Y, test_size=0.1, random_state=None):
         for t in range(n_time_steps):
             tril_indices = np.tril_indices_from(Y[k, t], k=-1)
 
-            perm = random_state.choice(np.arange(n_dyads), size=n_test)
+            perm = random_state.choice(
+                np.arange(n_dyads), size=n_test, replace=False)
             test_indices[k, t] = perm
 
             Y_vec = Y[k, t][tril_indices]
@@ -74,3 +75,35 @@ def train_test_split(Y, test_size=0.1, random_state=None):
             Y_new[k, t] += Y_new[k, t].T
 
     return Y_new, test_indices
+
+
+def train_test_split_nodes(Y, test_size=0.1, random_state=None):
+    n_layers, n_time_steps, n_nodes, _ = Y.shape
+
+    random_state = check_random_state(random_state)
+
+    test_size_type = np.asarray(test_size).dtype.kind
+    if test_size_type == 'f':
+        n_test = ceil(test_size * n_nodes)
+    else:
+        n_test = int(test_size)
+
+    # for each layer randomly remove n_test nodes
+    test_nodes = np.zeros((n_layers, n_test), dtype=np.int64)
+    for k in range(n_layers):
+        test_nodes[k] = random_state.choice(
+            np.arange(n_nodes), size=n_test, replace=False)
+
+    # apply the mask
+    Y_new = np.zeros_like(Y)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            tril_indices = np.tril_indices_from(Y[k, t], k=-1)
+
+            Y_new[k, t] = Y[k, t].copy()
+            for i in test_nodes[k]:
+                Y_new[k, t, :, i] = -1
+                Y_new[k, t, i, :] = -1
+            Y_new[k, t][np.diag_indices_from(Y_new[k, t])] = 0.
+
+    return Y_new, test_nodes
