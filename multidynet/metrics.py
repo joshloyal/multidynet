@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.metrics import roc_auc_score
 
 
-def calculate_auc_layer(Y_true, Y_pred, test_indices=None):
+def calculate_auc_single(Y_true, Y_pred, test_indices=None):
     n_time_steps, n_nodes, _ = Y_true.shape
     indices = np.tril_indices_from(Y_true[0], k=-1)
 
@@ -22,10 +22,13 @@ def calculate_auc_layer(Y_true, Y_pred, test_indices=None):
         y_true.extend(y_true_vec[subset])
         y_pred.extend(y_pred_vec[subset])
 
-    return roc_auc_score(y_true, y_pred)
+    return roc_auc_score(y_true,  y_pred)
 
 
 def calculate_auc(Y_true, Y_pred, test_indices=None):
+    if Y_true.ndim == 3:
+        return calculate_auc_single(Y_true, Y_pred, test_indices=test_indices)
+
     n_layers, n_time_steps, n_nodes, _ = Y_true.shape
     indices = np.tril_indices_from(Y_true[0, 0], k=-1)
 
@@ -40,6 +43,7 @@ def calculate_auc(Y_true, Y_pred, test_indices=None):
                 subset = y_true_vec != -1.0
             else:
                 subset = test_indices[k, t]
+
             y_true.extend(y_true_vec[subset])
             y_pred.extend(y_pred_vec[subset])
 

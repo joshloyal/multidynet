@@ -384,3 +384,89 @@ class DynamicMultilayerNetworkLSM(object):
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
         self.logp_ = model.logp_
         self.converged_ = model.converged_
+
+
+def fit_layer(Y, k, **est_kwargs):
+    Y_layer = np.expand_dims(Y[k], axis=0)
+
+    estimator = DynamicMultilayerNetworkLSM(**est_kwargs)
+
+    return estimator.fit(Y_layer)
+
+
+class SeperateDynamicMultilayerNetworkLSM(object):
+    """Fit seperate single layer network models."""
+    def __init__(self, n_features=2,
+                 lambda_odds_prior=2,
+                 lambda_var_prior=4,
+                 delta_var_prior=4,
+                 tau_sq='auto', sigma_sq='auto',
+                 a=4.0, b=8.0, c=10., d=0.1,
+                 n_init=1, max_iter=500, tol=1e-2,
+                 n_jobs=-1, random_state=42):
+        self.n_features = n_features
+        self.lambda_odds_prior = lambda_odds_prior
+        self.lambda_var_prior = lambda_var_prior
+        self.delta_var_prior = delta_var_prior
+        self.tau_sq = tau_sq
+        self.sigma_sq = sigma_sq
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+        self.n_init = n_init
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+
+    def fit(self, Y):
+        Y = check_array(Y, order='C', dtype=np.float64,
+                        ensure_2d=False, allow_nd=True, copy=False)
+
+        if Y.ndim == 3:
+            raise ValueError(
+                "Y.ndim == {}, when it should be 4. "
+                "If there is only a single layer, then reshape Y with "
+                "Y = np.expand_dims(Y, axis=0) and re-fit.".format(Y.ndim))
+
+        random_state = check_random_state(self.random_state)
+
+        if self.n_init == 1:  # parallelize over estimators
+            seeds = random_state.randint(
+                np.iinfo(np.int32).max, size=Y.shape[0])
+
+            self.estimators_ = Parallel(n_jobs=self.n_jobs)(delayed(fit_layer)(
+                Y, k,
+                n_features=self.n_features,
+                lambda_odds_prior=self.lambda_odds_prior,
+                lambda_var_prior=self.lambda_var_prior,
+                delta_var_prior=self.delta_var_prior,
+                tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
+                a=self.a, b=self.b, c=self.c, d=self.d,
+                n_init=self.n_init, max_iter=self.max_iter,
+                tol=self.tol, n_jobs=self.n_jobs,
+                random_state=seeds[k])
+            for k in range(Y.shape[0]))
+        else:  # parallelize over initializations
+            self.estimators_ = []
+            for k in range(Y.shape[0]):
+                Y_layer = np.expand_dims(Y[k], axis=0)
+
+                estimator = DynamicMultilayerNetworkLSM(
+                    n_features=self.n_features,
+                    lambda_odds_prior=self.lambda_odds_prior,
+                    lambda_var_prior=self.lambda_var_prior,
+                    delta_var_prior=self.delta_var_prior,
+                    tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
+                    a=self.a, b=self.b, c=self.c, d=self.d,
+                    n_init=self.n_init, max_iter=self.max_iter,
+                    tol=self.tol, n_jobs=self.n_jobs,
+                    random_state=random_state).fit(Y_layer)
+
+                self.estimators_.append(estimator)
+
+        # combine connection probabilities and calculate in-sample AUC
+        self.probas_ = np.concatenate(
+            [est.probas_ for est in self.estimators_], axis=0)
+        self.auc_ = calculate_auc(Y, self.probas_)

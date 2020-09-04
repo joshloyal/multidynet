@@ -10,7 +10,7 @@ from sklearn.utils import check_array, check_random_state
 from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 
-from .metrics import calculate_auc_layer
+#from .metrics import calculate_auc_layer
 from .multidynet import initialize_node_effects_single
 from .omega_lsm import update_omega
 from .deltas_lsm import update_deltas
@@ -212,7 +212,7 @@ class DynamicNetworkLSM(object):
             self.X_, self.delta_)
 
         # calculate in-sample AUC
-        self.auc_ = calculate_auc_layer(Y, self.probas_)
+        #self.auc_ = calculate_auc_layer(Y, self.probas_)
 
         return self
 
