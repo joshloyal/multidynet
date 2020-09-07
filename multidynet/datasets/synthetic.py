@@ -19,7 +19,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
     n_layers = lmbda.shape[0]
 
     if delta is None:
-        delta = np.zeros((n_layers, n_nodes), dtype=np.float64)
+        delta = np.zeros((n_layers, n_time_steps, n_nodes), dtype=np.float64)
 
     Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     probas = np.zeros(
@@ -27,7 +27,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
     for k in range(n_layers):
         for t in range(n_time_steps):
             # sample the adjacency matrix
-            deltak = delta[k].reshape(-1, 1)
+            deltak = delta[k, t].reshape(-1, 1)
             eta = np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
@@ -70,7 +70,11 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
         n_layers = lmbda.shape[0]
 
     # degree effects
-    delta = rng.randn(n_layers, n_nodes)
+    delta = np.zeros((n_layers,  n_time_steps, n_nodes))
+    for k in range(n_layers):
+        delta[k, 0] = rng.randn(n_nodes)
+        for t in range(1, n_time_steps):
+            delta[k, t] = delta[k, t-1] + np.sqrt(0.1) * rng.randn(n_nodes)
 
     # construct the network
     Y, probas = multilayer_network_from_dynamic_latent_space(
@@ -97,7 +101,11 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
         -2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
 
     # sample degree effects from a U(-4, 4)
-    delta = rng.uniform(-4, 4, n_layers*n_nodes).reshape(n_layers, n_nodes)
+    delta = np.zeros((n_layers,  n_time_steps, n_nodes))
+    for k in range(n_layers):
+        delta[k, 0] = rng.uniform(-4, 4, n_nodes)
+        for t in range(1, n_time_steps):
+            delta[k, t] = delta[k, t-1] + np.sqrt(0.1) * rng.randn(n_nodes)
 
     # construct the network
     Y, probas = multilayer_network_from_dynamic_latent_space(

@@ -55,8 +55,8 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                           double[:, :, :, ::1] X_sigma,
                           double[:, ::1] lmbda,
                           double[:, :, ::1] lmbda_sigma,
-                          double[:, ::1] delta,
-                          double[:, ::1] delta_sigma):
+                          double[:, :, ::1] delta,
+                          double[:, :, ::1] delta_sigma):
     cdef size_t n_layers = omega.shape[0]
     cdef size_t n_time_steps = omega.shape[1]
     cdef size_t n_nodes = omega.shape[2]
@@ -72,12 +72,13 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                     if Y[k, t, i, j] != -1.0:
                         omega[k, t, i, j], psi_sq = update_omega_single(
                             X[t, i], X_sigma[t, i], X[t, j], X_sigma[t, j],
-                            lmbda[k], lmbda_sigma[k], delta[k, i], delta[k, j],
-                            delta_sigma[k, i], delta_sigma[k, j])
+                            lmbda[k], lmbda_sigma[k],
+                            delta[k, t, i], delta[k, t, j],
+                            delta_sigma[k, t, i], delta_sigma[k, t, j])
 
                         omega[k, t, j, i] = omega[k, t, i, j]
 
-                        psi = delta[k, i] + delta[k, j]
+                        psi = delta[k, t, i] + delta[k, t, j]
                         for p in range(n_features):
                             psi += lmbda[k, p] * X[t, i, p] * X[t, j, p]
 
