@@ -27,7 +27,9 @@ class ModelParameters(object):
     def __init__(self, omega, X, X_sigma, X_cross_cov,
                  lmbda, lmbda_sigma, lmbda_logit_prior,
                  delta, delta_sigma, delta_cross_cov,
-                 a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq):
+                 a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq,
+                 a_tau_sq_delta, b_tau_sq_delta, c_sigma_sq_delta,
+                 d_sigma_sq_delta):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
@@ -42,10 +44,10 @@ class ModelParameters(object):
         self.b_tau_sq_ = b_tau_sq
         self.c_sigma_sq_ = c_sigma_sq
         self.d_sigma_sq_ = d_sigma_sq
-        self.a_tau_sq_delta_ = a_tau_sq
-        self.b_tau_sq_delta_ = b_tau_sq
-        self.c_sigma_sq_delta_ = c_sigma_sq
-        self.d_sigma_sq_delta_ = d_sigma_sq
+        self.a_tau_sq_delta_ = a_tau_sq_delta
+        self.b_tau_sq_delta_ = b_tau_sq_delta
+        self.c_sigma_sq_delta_ = c_sigma_sq_delta
+        self.d_sigma_sq_delta_ = d_sigma_sq_delta
         self.converged_ = False
         self.logp_ = []
 
@@ -115,7 +117,8 @@ def initialize_node_effects(Y):
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                          delta_var_prior, a, b, c, d, random_state):
+                          a, b, c, d, a_delta, b_delta, c_delta, d_delta,
+                          random_state):
     rng = check_random_state(random_state)
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -148,8 +151,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize node-effects based on degree
     delta = initialize_node_effects(Y)
-    delta_sigma = delta_var_prior * np.ones((n_layers, n_time_steps, n_nodes))
-    delta_cross_cov = delta_var_prior * np.ones((n_layers, n_time_steps - 1, n_nodes))
+    delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
+    delta_cross_cov = np.ones((n_layers, n_time_steps - 1, n_nodes))
 
     # initialize based on prior information
     a_tau_sq = a
@@ -163,12 +166,13 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         lmbda_logit_prior=lmbda_logit_prior,
         delta=delta, delta_sigma=delta_sigma, delta_cross_cov=delta_cross_cov,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
-        d_sigma_sq=d_sigma_sq)
+        d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
+        c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta)
 
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  delta_var_prior, tau_sq, sigma_sq, a, b, c, d,
+                  a, b, c, d, a_delta, b_delta, c_delta, d_delta,
                   max_iter, tol, random_state, verbose=True):
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -178,8 +182,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize parameters of the model
     model = initialize_parameters(
-        Y, n_features, lambda_odds_prior, lambda_var_prior, delta_var_prior,
-        a, b, c, d, random_state)
+        Y, n_features, lambda_odds_prior, lambda_var_prior,
+        a, b, c, d, a_delta, b_delta, c_delta, d_delta, random_state)
 
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_loglik = loglik
@@ -237,11 +241,12 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # update initial variance of the degree effects
         model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
-            model.delta_, model.delta_sigma_, a, b)
+            model.delta_, model.delta_sigma_, a_delta, b_delta)
 
         # update step sizes of the degree effects
         model.c_sigma_sq_delta_, model.d_sigma_sq_delta_ = update_sigma_sq_delta(
-            model.delta_, model.delta_sigma_, model.delta_cross_cov_, c, d)
+            model.delta_, model.delta_sigma_, model.delta_cross_cov_,
+            c_delta, d_delta)
 
         model.logp_.append(loglik)
 
@@ -264,8 +269,8 @@ def calculate_probabilities(X, lmbda, delta):
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
-            deltak = delta[k, t].reshape(-1, 1)
-            eta = np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T)
+            deltakt = delta[k, t].reshape(-1, 1)
+            eta = np.add(deltakt, deltakt.T) + np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
     return probas
@@ -341,21 +346,21 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4,
-                 delta_var_prior=4,
-                 tau_sq='auto', sigma_sq='auto',
-                 a=4.0, b=8.0, c=10., d=0.1,
+                 a=4.0, b=20.0, c=20., d=2.0,
+                 a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
-        self.delta_var_prior = delta_var_prior
-        self.tau_sq = tau_sq
-        self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
         self.d = d
+        self.a_delta = a_delta
+        self.b_delta = b_delta
+        self.c_delta = c_delta
+        self.d_delta = d_delta
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -384,8 +389,9 @@ class DynamicMultilayerNetworkLSM(object):
         verbose = True if self.n_init == 1 else False
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features, self.lambda_odds_prior,
-                self.lambda_var_prior, self.delta_var_prior,
-                self.tau_sq, self.sigma_sq, self.a, self.b, self.c, self.d,
+                self.lambda_var_prior,
+                self.a, self.b, self.c, self.d,
+                self.a_delta, self.b_delta, self.c_delta, self.d_delta,
                 self.max_iter, self.tol, seed, verbose=verbose)
             for seed in seeds)
 
