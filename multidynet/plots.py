@@ -202,7 +202,7 @@ def plot_static_sociability(model, k=0, node_labels=None, layer_label=None,
     return fig, ax
 
 
-def plot_sociability(model, k=0, node_list=None, node_colors=None,
+def plot_sociability(model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
                      node_labels=None, layer_label=None, plot_hline=True,
                      xlabel='Time', alpha=0.15, ax=None, figsize=(10, 6),
                      color_code=False):
@@ -233,6 +233,18 @@ def plot_sociability(model, k=0, node_list=None, node_colors=None,
             ax.annotate(node_label,
                         xy=(n_time_steps + 1, model.delta_[k, -1, node_id]),
                         color=node_colors[i])
+
+            if q_alpha is not None:
+                x_upp = np.zeros(n_time_steps)
+                x_low = np.zeros(n_time_steps)
+                z_alpha = norm.ppf(1 - q_alpha / 2.)
+                ts = np.arange(n_time_steps)
+                for t in range(n_time_steps):
+                    se = z_alpha * np.sqrt(model.delta_sigma_[k, t, node_id])
+                    x_upp[t] = model.delta_[k, t, node_id] + se
+                    x_low[t] = model.delta_[k, t, node_id] - se
+                ax.fill_between(
+                    ts, x_low, x_upp, alpha=alpha, color=node_colors[i])
 
     if plot_hline:
         ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--')
