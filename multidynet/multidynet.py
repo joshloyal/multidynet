@@ -160,6 +160,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     c_sigma_sq = c
     d_sigma_sq = d
 
+    a_tau_sq_delta = a_delta
+    b_tau_sq_delta = b_delta
+    c_sigma_sq_delta = c_delta
+    d_sigma_sq_delta = d_delta
+
     return ModelParameters(
         omega=omega, X=X, X_sigma=X_sigma, X_cross_cov=X_cross_cov,
         lmbda=lmbda, lmbda_sigma=lmbda_sigma,
@@ -197,12 +202,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.delta_, model.delta_sigma_)
 
         # latent trajectory updates
-        tau_sq_prec = (
-            model.a_tau_sq_ / model.b_tau_sq_ if tau_sq == 'auto' else
-                1. / tau_sq)
-        sigma_sq_prec = (
-            model.c_sigma_sq_ / model.d_sigma_sq_ if sigma_sq == 'auto' else
-                1. / sigma_sq)
+        tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
+        sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
 
         update_latent_positions(
@@ -230,14 +231,12 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             XLX, model.omega_, tau_sq_prec, sigma_sq_prec)
 
         # update initial variance of the latent space
-        if tau_sq == 'auto':
-            model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
-                Y, model.X_, model.X_sigma_, a, b)
+        model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
+            Y, model.X_, model.X_sigma_, a, b)
 
         # update step sizes of the latent space
-        if sigma_sq == 'auto':
-            model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
-                Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
+        model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
+            Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
 
         # update initial variance of the degree effects
         model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
@@ -295,15 +294,6 @@ class DynamicMultilayerNetworkLSM(object):
 
     delta_var_prior : float (default=4)
         The variance of the normal prior placed on the degree random effects.
-
-    tau_sq : float or str (default='auto')
-        The variance of the normal prior placed on the initial distribution of
-        the latent positions. If tau_sq == 'auto', then the value is inferred
-        from the data.
-
-    sigma_sq : float or str (default='auto')
-        The random-walk variance of the latent positions. If sigma_sq == 'auto',
-        then the value is inferred from the data.
 
     a : float (default=4.)
         Shape parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
@@ -476,8 +466,6 @@ class SeperateDynamicMultilayerNetworkLSM(object):
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.delta_var_prior = delta_var_prior
-        self.tau_sq = tau_sq
-        self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
