@@ -202,7 +202,8 @@ def plot_static_sociability(model, k=0, node_labels=None, layer_label=None,
     return fig, ax
 
 
-def plot_sociability(model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
+def plot_social_trajectories(
+                     model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
                      node_labels=None, layer_label=None, plot_hline=True,
                      xlabel='Time', alpha=0.15, fill_alpha=0.2, line_width=3,
                      ax=None, figsize=(10, 6),
