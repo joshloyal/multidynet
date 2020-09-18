@@ -52,37 +52,6 @@ class ModelParameters(object):
         self.logp_ = []
 
 
-#def initialize_node_effects_single(Y):
-#    n_time_steps, n_nodes, _ = Y.shape
-#
-#    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
-#    dyads = np.tril_indices_from(Y[0], k=-1)
-#    y_vec = np.zeros(n_time_steps * n_dyads)
-#
-#    # construct dummy node indicators
-#    cols = np.r_[dyads[0], dyads[1]]
-#    rows = np.r_[np.arange(n_dyads), np.arange(n_dyads)]
-#    x_dummy = sp.coo_matrix((np.ones(2 * n_dyads), (rows, cols)),
-#                            shape=(n_dyads, n_nodes))
-#
-#    # dyad target
-#    for t in range(n_time_steps):
-#        yt_vec = Y[t][dyads]
-#        y_vec[(t * n_dyads):((t+1) * n_dyads)] = Y[t][dyads]
-#        if t > 0:
-#            X = sp.vstack((X, x_dummy))
-#        else:
-#            X = x_dummy.copy()
-#    X = X.tocsr()
-#
-#    # remove missing values
-#    non_missing = y_vec != -1.0
-#
-#    logreg = LogisticRegression(fit_intercept=False, C=1e5)
-#    logreg.fit(X[non_missing], y_vec[non_missing])
-#
-#    return logreg.coef_[0]
-
 def initialize_node_effects_single(Y):
     n_nodes = Y.shape[0]
 
@@ -292,24 +261,33 @@ class DynamicMultilayerNetworkLSM(object):
     lambda_var_prior : float (default=4)
         The variance of the normal prior placed on the assortativity parameters.
 
-    delta_var_prior : float (default=4)
-        The variance of the normal prior placed on the degree random effects.
-
     a : float (default=4.)
         Shape parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-        Only relevant if `tau_sq`=='auto'.
 
-    b : float (default=8.)
+    b : float (default=20.)
         Scale parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-        Only relevant if `tau_sq`=='auto'.
 
-    c : float (default=10.)
+    c : float (default=20.)
         Shape parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-        Only relevant if `sigma_sq`=='auto.
 
-    d : float (default=0.1)
+    d : float (default=2.)
         Scale parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-        Only relevant if `sigma_sq`=='auto.
+
+    a_delta : float (default=4.)
+        Shape parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    b_delta : float (default=20.)
+        Scale parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    c_delta : float (default=20.)
+        Shape parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
+
+    d_delta : float (default=2.)
+        Scale parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
 
     n_init : int (default=1)
         The number of initializations to perform. The result with the highest
@@ -457,19 +435,21 @@ class SeperateDynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4,
-                 delta_var_prior=4,
-                 tau_sq='auto', sigma_sq='auto',
-                 a=4.0, b=8.0, c=10., d=0.1,
+                 a=4.0, b=20.0, c=20., d=2.0,
+                 a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
-        self.delta_var_prior = delta_var_prior
         self.a = a
         self.b = b
         self.c = c
         self.d = d
+        self.a_delta = a_delta
+        self.b_delta = b_delta
+        self.c_delta = c_delta
+        self.d_delta = d_delta
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -497,9 +477,9 @@ class SeperateDynamicMultilayerNetworkLSM(object):
                 n_features=self.n_features,
                 lambda_odds_prior=self.lambda_odds_prior,
                 lambda_var_prior=self.lambda_var_prior,
-                delta_var_prior=self.delta_var_prior,
-                tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
                 a=self.a, b=self.b, c=self.c, d=self.d,
+                a_delta=self.a_delta, b_delta=self.b_delta,
+                c_delta=self.c_delta, d_delta=self.d_delta,
                 n_init=self.n_init, max_iter=self.max_iter,
                 tol=self.tol, n_jobs=self.n_jobs,
                 random_state=seeds[k])
@@ -513,9 +493,9 @@ class SeperateDynamicMultilayerNetworkLSM(object):
                     n_features=self.n_features,
                     lambda_odds_prior=self.lambda_odds_prior,
                     lambda_var_prior=self.lambda_var_prior,
-                    delta_var_prior=self.delta_var_prior,
-                    tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
                     a=self.a, b=self.b, c=self.c, d=self.d,
+                    a_delta=self.a_delta, b_delta=self.b_delta,
+                    c_delta=self.c_delta, d_delta=self.d_delta,
                     n_init=self.n_init, max_iter=self.max_iter,
                     tol=self.tol, n_jobs=self.n_jobs,
                     random_state=random_state).fit(Y_layer)
