@@ -16,7 +16,7 @@ cimport numpy as np
 def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
                                            double[:, :, ::1] X,
                                            double[:, :, :, ::1] X_sigma,
-                                           double[:, :] delta,
+                                           double[:, :, ::1] delta,
                                            double[:, :, :, ::1] omega,
                                            double[:] lmbda,
                                            int p):
@@ -32,7 +32,7 @@ def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
                 if Y[0, t, i, j] != -1.0:
                     eta += (
                         (Y[0, t, i, j] - 0.5 - omega[0, t, i, j] * (
-                            delta[0, i] + delta[0, j])) *
+                            delta[0, t, i] + delta[0, t, j])) *
                             X[t, i, p] * X[t, j, p])
 
                     for q in range(n_features):
@@ -48,7 +48,7 @@ def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
 def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
-                                 double[:, :] delta,
+                                 double[:, :, ::1] delta,
                                  double[:, :, :, ::1] omega,
                                  double lmbda_var_prior,
                                  int k):
@@ -69,7 +69,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                         eta1[p] += (
                             (Y[k, t, i, j] - 0.5 -
                                 omega[k, t, i, j] * (
-                                    delta[k, i] + delta[k, j])) *
+                                    delta[k, t, i] + delta[k, t, j])) *
                             X[t, i, p] * X[t, j, p])
 
                         for q in range(p + 1):
@@ -88,7 +88,7 @@ def update_lambdas(const double[:, :, :, ::1] Y,
                    double[:, :, :, ::1] X_sigma,
                    np.ndarray[double, ndim=2, mode='c'] lmbda,
                    np.ndarray[double, ndim=3, mode='c'] lmbda_sigma,
-                   double[:, ::1] delta,
+                   double[:, :, ::1] delta,
                    double[:, :, :, ::1] omega,
                    double lmbda_var_prior,
                    double lmbda_logit_prior):

@@ -12,9 +12,10 @@ from tqdm import tqdm
 
 from .omega import update_omega
 from .lds import update_latent_positions
+from .deltas_lds import update_deltas
 from .lmbdas import update_lambdas
-from .deltas import update_deltas
 from .variances import update_tau_sq, update_sigma_sq
+from .variances import update_tau_sq_delta, update_sigma_sq_delta
 from .metrics import calculate_auc
 
 
@@ -24,8 +25,11 @@ __all__ = ['DynamicMultilayerNetworkLSM']
 
 class ModelParameters(object):
     def __init__(self, omega, X, X_sigma, X_cross_cov,
-                 lmbda, lmbda_sigma, lmbda_logit_prior, delta, delta_sigma,
-                 a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq):
+                 lmbda, lmbda_sigma, lmbda_logit_prior,
+                 delta, delta_sigma, delta_cross_cov,
+                 a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq,
+                 a_tau_sq_delta, b_tau_sq_delta, c_sigma_sq_delta,
+                 d_sigma_sq_delta):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
@@ -35,36 +39,31 @@ class ModelParameters(object):
         self.lambda_logit_prior_ = lmbda_logit_prior
         self.delta_ = delta
         self.delta_sigma_ = delta_sigma
+        self.delta_cross_cov_ = delta_cross_cov
         self.a_tau_sq_ = a_tau_sq
         self.b_tau_sq_ = b_tau_sq
         self.c_sigma_sq_ = c_sigma_sq
         self.d_sigma_sq_ = d_sigma_sq
+        self.a_tau_sq_delta_ = a_tau_sq_delta
+        self.b_tau_sq_delta_ = b_tau_sq_delta
+        self.c_sigma_sq_delta_ = c_sigma_sq_delta
+        self.d_sigma_sq_delta_ = d_sigma_sq_delta
         self.converged_ = False
         self.logp_ = []
 
 
 def initialize_node_effects_single(Y):
-    n_time_steps, n_nodes, _ = Y.shape
+    n_nodes = Y.shape[0]
 
     n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
-    dyads = np.tril_indices_from(Y[0], k=-1)
-    y_vec = np.zeros(n_time_steps * n_dyads)
+    dyads = np.tril_indices_from(Y, k=-1)
+    y_vec = Y[dyads]
 
     # construct dummy node indicators
     cols = np.r_[dyads[0], dyads[1]]
     rows = np.r_[np.arange(n_dyads), np.arange(n_dyads)]
-    x_dummy = sp.coo_matrix((np.ones(2 * n_dyads), (rows, cols)),
-                            shape=(n_dyads, n_nodes))
-
-    # dyad target
-    for t in range(n_time_steps):
-        yt_vec = Y[t][dyads]
-        y_vec[(t * n_dyads):((t+1) * n_dyads)] = Y[t][dyads]
-        if t > 0:
-            X = sp.vstack((X, x_dummy))
-        else:
-            X = x_dummy.copy()
-    X = X.tocsr()
+    X = sp.coo_matrix((np.ones(2 * n_dyads), (rows, cols)),
+                       shape=(n_dyads, n_nodes)).tocsr()
 
     # remove missing values
     non_missing = y_vec != -1.0
@@ -78,15 +77,17 @@ def initialize_node_effects_single(Y):
 def initialize_node_effects(Y):
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
-    delta = np.zeros((n_layers, n_nodes))
+    delta = np.zeros((n_layers, n_time_steps, n_nodes))
     for k in range(n_layers):
-        delta[k] = initialize_node_effects_single(Y[k])
+        for t in range(n_time_steps):
+            delta[k, t] = initialize_node_effects_single(Y[k, t])
 
     return delta
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                          delta_var_prior, a, b, c, d, random_state):
+                          a, b, c, d, a_delta, b_delta, c_delta, d_delta,
+                          random_state):
     rng = check_random_state(random_state)
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -119,7 +120,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize node-effects based on degree
     delta = initialize_node_effects(Y)
-    delta_sigma = delta_var_prior * np.ones((n_layers, n_nodes))
+    delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
+    delta_cross_cov = np.ones((n_layers, n_time_steps - 1, n_nodes))
 
     # initialize based on prior information
     a_tau_sq = a
@@ -127,27 +129,35 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     c_sigma_sq = c
     d_sigma_sq = d
 
+    a_tau_sq_delta = a_delta
+    b_tau_sq_delta = b_delta
+    c_sigma_sq_delta = c_delta
+    d_sigma_sq_delta = d_delta
+
     return ModelParameters(
         omega=omega, X=X, X_sigma=X_sigma, X_cross_cov=X_cross_cov,
         lmbda=lmbda, lmbda_sigma=lmbda_sigma,
         lmbda_logit_prior=lmbda_logit_prior,
-        delta=delta, delta_sigma=delta_sigma,
+        delta=delta, delta_sigma=delta_sigma, delta_cross_cov=delta_cross_cov,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
-        d_sigma_sq=d_sigma_sq)
+        d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
+        c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta)
 
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  delta_var_prior, tau_sq, sigma_sq, a, b, c, d,
+                  a, b, c, d, a_delta, b_delta, c_delta, d_delta,
                   max_iter, tol, random_state, verbose=True):
+
+    n_layers, n_time_steps, n_nodes, _ = Y.shape
 
     # convergence criteria (Eq{L(Y | theta)})
     loglik = -np.infty
 
     # initialize parameters of the model
     model = initialize_parameters(
-        Y, n_features, lambda_odds_prior, lambda_var_prior, delta_var_prior,
-        a, b, c, d, random_state)
+        Y, n_features, lambda_odds_prior, lambda_var_prior,
+        a, b, c, d, a_delta, b_delta, c_delta, d_delta, random_state)
 
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_loglik = loglik
@@ -161,12 +171,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.delta_, model.delta_sigma_)
 
         # latent trajectory updates
-        tau_sq_prec = (
-            model.a_tau_sq_ / model.b_tau_sq_ if tau_sq == 'auto' else
-                1. / tau_sq)
-        sigma_sq_prec = (
-            model.c_sigma_sq_ / model.d_sigma_sq_ if sigma_sq == 'auto' else
-                1. / sigma_sq)
+        tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
+        sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
 
         update_latent_positions(
@@ -181,19 +187,34 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.lambda_logit_prior_)
 
         # update node random effects
+        XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
+        for k in range(n_layers):
+            for t in range(n_time_steps):
+                XLX[k, t] = np.dot(model.X_[t] * model.lambda_[k], model.X_[t].T)
+
+        tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
+        sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
+
         update_deltas(
-            Y, model.X_, model.lambda_, model.delta_,
-            model.delta_sigma_, model.omega_, delta_var_prior)
+            Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
+            XLX, model.omega_, tau_sq_prec, sigma_sq_prec)
 
-        # update intial variance of the latent space
-        if tau_sq == 'auto':
-            model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
-                Y, model.X_, model.X_sigma_, a, b)
+        # update initial variance of the latent space
+        model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
+            Y, model.X_, model.X_sigma_, a, b)
 
-        # update step sizes
-        if sigma_sq == 'auto':
-            model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
-                Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
+        # update step sizes of the latent space
+        model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
+            Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
+
+        # update initial variance of the degree effects
+        model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
+            model.delta_, model.delta_sigma_, a_delta, b_delta)
+
+        # update step sizes of the degree effects
+        model.c_sigma_sq_delta_, model.d_sigma_sq_delta_ = update_sigma_sq_delta(
+            model.delta_, model.delta_sigma_, model.delta_cross_cov_,
+            c_delta, d_delta)
 
         model.logp_.append(loglik)
 
@@ -216,8 +237,8 @@ def calculate_probabilities(X, lmbda, delta):
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
-            deltak = delta[k].reshape(-1, 1)
-            eta = np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T)
+            deltakt = delta[k, t].reshape(-1, 1)
+            eta = np.add(deltakt, deltakt.T) + np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
     return probas
@@ -240,33 +261,33 @@ class DynamicMultilayerNetworkLSM(object):
     lambda_var_prior : float (default=4)
         The variance of the normal prior placed on the assortativity parameters.
 
-    delta_var_prior : float (default=4)
-        The variance of the normal prior placed on the degree random effects.
-
-    tau_sq : float or str (default='auto')
-        The variance of the normal prior placed on the initial distribution of
-        the latent positions. If tau_sq == 'auto', then the value is inferred
-        from the data.
-
-    sigma_sq : float or str (default='auto')
-        The random-walk variance of the latent positions. If sigma_sq == 'auto',
-        then the value is inferred from the data.
-
     a : float (default=4.)
         Shape parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-        Only relevant if `tau_sq`=='auto'.
 
-    b : float (default=8.)
+    b : float (default=20.)
         Scale parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-        Only relevant if `tau_sq`=='auto'.
 
-    c : float (default=10.)
+    c : float (default=20.)
         Shape parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-        Only relevant if `sigma_sq`=='auto.
 
-    d : float (default=0.1)
+    d : float (default=2.)
         Scale parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-        Only relevant if `sigma_sq`=='auto.
+
+    a_delta : float (default=4.)
+        Shape parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    b_delta : float (default=20.)
+        Scale parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    c_delta : float (default=20.)
+        Shape parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
+
+    d_delta : float (default=2.)
+        Scale parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
 
     n_init : int (default=1)
         The number of initializations to perform. The result with the highest
@@ -293,21 +314,21 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4,
-                 delta_var_prior=4,
-                 tau_sq='auto', sigma_sq='auto',
-                 a=4.0, b=8.0, c=10., d=0.1,
+                 a=4.0, b=20.0, c=20., d=2.0,
+                 a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
-        self.delta_var_prior = delta_var_prior
-        self.tau_sq = tau_sq
-        self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
         self.d = d
+        self.a_delta = a_delta
+        self.b_delta = b_delta
+        self.c_delta = c_delta
+        self.d_delta = d_delta
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -336,8 +357,9 @@ class DynamicMultilayerNetworkLSM(object):
         verbose = True if self.n_init == 1 else False
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features, self.lambda_odds_prior,
-                self.lambda_var_prior, self.delta_var_prior,
-                self.tau_sq, self.sigma_sq, self.a, self.b, self.c, self.d,
+                self.lambda_var_prior,
+                self.a, self.b, self.c, self.d,
+                self.a_delta, self.b_delta, self.c_delta, self.d_delta,
                 self.max_iter, self.tol, seed, verbose=verbose)
             for seed in seeds)
 
@@ -367,21 +389,35 @@ class DynamicMultilayerNetworkLSM(object):
 
     def _set_parameters(self, model):
         self.omega_ = model.omega_
+
         self.X_ = model.X_
         self.X_sigma_ = model.X_sigma_
         self.X_cross_cov_ = model.X_cross_cov_
+
         self.lambda_ = model.lambda_
         self.lambda_[0] = np.sign(model.lambda_[0])
         self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
         self.lambda_sigma_ = model.lambda_sigma_
+
         self.delta_ = model.delta_
         self.delta_sigma_ = model.delta_sigma_
+        self.delta_cross_cov_ = model.delta_cross_cov_
+
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
         self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
         self.c_sigma_sq_ = model.c_sigma_sq_
         self.d_sigma_sq_ = model.d_sigma_sq_
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
+
+        self.a_tau_sq_delta_ = model.a_tau_sq_delta_
+        self.b_tau_sq_delta_ = model.b_tau_sq_delta_
+        self.tau_sq_delta_ = self.b_tau_sq_delta_ / (self.a_tau_sq_delta_ - 1)
+        self.c_sigma_sq_delta_ = model.c_sigma_sq_delta_
+        self.d_sigma_sq_delta_ = model.d_sigma_sq_delta_
+        self.sigma_sq_delta_ = (
+            self.d_sigma_sq_delta_ / (self.c_sigma_sq_delta_ - 1))
+
         self.logp_ = model.logp_
         self.converged_ = model.converged_
 
@@ -399,21 +435,21 @@ class SeperateDynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=2,
                  lambda_var_prior=4,
-                 delta_var_prior=4,
-                 tau_sq='auto', sigma_sq='auto',
-                 a=4.0, b=8.0, c=10., d=0.1,
+                 a=4.0, b=20.0, c=20., d=2.0,
+                 a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
-        self.delta_var_prior = delta_var_prior
-        self.tau_sq = tau_sq
-        self.sigma_sq = sigma_sq
         self.a = a
         self.b = b
         self.c = c
         self.d = d
+        self.a_delta = a_delta
+        self.b_delta = b_delta
+        self.c_delta = c_delta
+        self.d_delta = d_delta
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -441,9 +477,9 @@ class SeperateDynamicMultilayerNetworkLSM(object):
                 n_features=self.n_features,
                 lambda_odds_prior=self.lambda_odds_prior,
                 lambda_var_prior=self.lambda_var_prior,
-                delta_var_prior=self.delta_var_prior,
-                tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
                 a=self.a, b=self.b, c=self.c, d=self.d,
+                a_delta=self.a_delta, b_delta=self.b_delta,
+                c_delta=self.c_delta, d_delta=self.d_delta,
                 n_init=self.n_init, max_iter=self.max_iter,
                 tol=self.tol, n_jobs=self.n_jobs,
                 random_state=seeds[k])
@@ -457,9 +493,9 @@ class SeperateDynamicMultilayerNetworkLSM(object):
                     n_features=self.n_features,
                     lambda_odds_prior=self.lambda_odds_prior,
                     lambda_var_prior=self.lambda_var_prior,
-                    delta_var_prior=self.delta_var_prior,
-                    tau_sq=self.tau_sq, sigma_sq=self.sigma_sq,
                     a=self.a, b=self.b, c=self.c, d=self.d,
+                    a_delta=self.a_delta, b_delta=self.b_delta,
+                    c_delta=self.c_delta, d_delta=self.d_delta,
                     n_init=self.n_init, max_iter=self.max_iter,
                     tol=self.tol, n_jobs=self.n_jobs,
                     random_state=random_state).fit(Y_layer)

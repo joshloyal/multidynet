@@ -15,7 +15,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:, ::1] lmbda,
                                  double[:, :, ::1] lmbda_sigma,
-                                 double[:, ::1] delta,
+                                 double[:, :, ::1] delta,
                                  double[:, :, :, ::1] omega,
                                  int i):
     cdef size_t t, k, j, p, q
@@ -38,7 +38,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                             lmbda[k, p] * X[t, j, p] * (
                                 Y[k, t, i, j] - 0.5 -
                                     omega[k, t, i, j] * (
-                                         delta[k, i] + delta[k, j])))
+                                         delta[k, t, i] + delta[k, t, j])))
 
                         for q in range(p + 1):
                             eta2[t, p, q] += omega[k, t, i, j] * (
@@ -153,7 +153,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] lmbda_sigma,
-                            double[:, ::1] delta,
+                            double[:, :, ::1] delta,
                             double[:, :, :, ::1] omega,
                             double tau_prec,
                             double sigma_prec):
