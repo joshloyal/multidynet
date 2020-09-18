@@ -85,7 +85,7 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
 
 def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
                                n_features=2, tau_sq=4.0, sigma_sq=0.05,
-                               random_state=42):
+                               sigma_sq_delta=0.1, random_state=42):
     rng = check_random_state(random_state)
 
     # construct latent features
@@ -105,7 +105,8 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     for k in range(n_layers):
         delta[k, 0] = rng.uniform(-4, 4, n_nodes)
         for t in range(1, n_time_steps):
-            delta[k, t] = delta[k, t-1] + np.sqrt(0.1) * rng.randn(n_nodes)
+            delta[k, t] = (
+                delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
 
     # construct the network
     Y, probas = multilayer_network_from_dynamic_latent_space(

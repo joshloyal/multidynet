@@ -204,7 +204,8 @@ def plot_static_sociability(model, k=0, node_labels=None, layer_label=None,
 
 def plot_sociability(model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
                      node_labels=None, layer_label=None, plot_hline=True,
-                     xlabel='Time', alpha=0.15, ax=None, figsize=(10, 6),
+                     xlabel='Time', alpha=0.15, fill_alpha=0.2, line_width=3,
+                     ax=None, figsize=(10, 6),
                      color_code=False):
 
     n_layers, n_time_steps, n_nodes = model.delta_.shape
@@ -229,7 +230,8 @@ def plot_sociability(model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
 
         for i, node_label in enumerate(node_list):
             node_id = np.where(node_labels == node_label)[0].item()
-            ax.plot(model.delta_[k, :, node_id].T, '-', lw=3, c=node_colors[i])
+            ax.plot(model.delta_[k, :, node_id].T, '-',
+                    lw=line_width, c=node_colors[i])
             ax.annotate(node_label,
                         xy=(n_time_steps + 1, model.delta_[k, -1, node_id]),
                         color=node_colors[i])
@@ -244,7 +246,7 @@ def plot_sociability(model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
                     x_upp[t] = model.delta_[k, t, node_id] + se
                     x_low[t] = model.delta_[k, t, node_id] - se
                 ax.fill_between(
-                    ts, x_low, x_upp, alpha=alpha, color=node_colors[i])
+                    ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
         ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--')
@@ -487,7 +489,7 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
         ax.invert_yaxis()
         ax.set_title('p = {}'.format(p + 1))
 
-        axes.flat[-1].set_xlabel('Assortativity Parameter ($\lambda_{kp}$)')
+        axes.flat[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)')
 
     x_max = max([ax.get_xlim()[1] for ax in axes.flat])
     for ax in axes.flat:
