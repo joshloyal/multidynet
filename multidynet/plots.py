@@ -117,7 +117,8 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
                        facecolor='none', zorder=1, ax=ax)
 
     if z is not None:
-        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6)
+        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6,
+                  fontsize=12)
 
     return fig, ax
 
@@ -206,7 +207,7 @@ def plot_social_trajectories(
                      model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
                      node_labels=None, layer_label=None, plot_hline=True,
                      xlabel='Time', alpha=0.15, fill_alpha=0.2, line_width=3,
-                     ax=None, figsize=(10, 6),
+                     ax=None, figsize=(10, 6), label_offset=1, fontsize=12,
                      color_code=False):
 
     n_layers, n_time_steps, n_nodes = model.delta_.shape
@@ -234,8 +235,9 @@ def plot_social_trajectories(
             ax.plot(model.delta_[k, :, node_id].T, '-',
                     lw=line_width, c=node_colors[i])
             ax.annotate(node_label,
-                        xy=(n_time_steps + 1, model.delta_[k, -1, node_id]),
-                        color=node_colors[i])
+                        xy=(n_time_steps + label_offset,
+                            model.delta_[k, -1, node_id]),
+                        color=node_colors[i], fontsize=fontsize)
 
             if q_alpha is not None:
                 x_upp = np.zeros(n_time_steps)
@@ -250,7 +252,7 @@ def plot_social_trajectories(
                     ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
-        ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--')
+        ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--', color='k')
 
     # remove spines
     ax.spines['right'].set_visible(False)
@@ -259,20 +261,21 @@ def plot_social_trajectories(
     ax.spines['bottom'].set_visible(False)
 
     # axis-labels
-    ax.set_ylabel('Sociability')
-    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Sociality', fontsize=fontsize)
+    ax.set_xlabel(xlabel, fontsize=fontsize)
 
     if layer_label is not None:
-        ax.set_title(layer_label)
+        ax.set_title(layer_label, fontsize=fontsize)
     else:
-        ax.set_title('k = {}'.format(k))
+        ax.set_title('k = {}'.format(k), fontsize=fontsize)
 
 
     return fig, ax
 
 
 def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
-                           nrows=None, ncols=1, alpha=0.2, linestyle='o--',
+                           node_colors=None, nrows=None, ncols=1, alpha=0.2,
+                           linestyle='o--', fontsize=12,
                            figsize=(10, 8)):
 
     if nrows is None:
@@ -285,33 +288,38 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
         node_labels = [i for i in range(model.X_.shape[1])]
     node_labels = np.asarray(node_labels)
 
+    if node_colors is None:
+        node_colors = get_colors(np.arange(len(node_list)))
+
     n_time_steps, n_nodes, n_features = model.X_.shape
     z_alpha = norm.ppf(1 - q_alpha / 2.)
     ts = np.arange(n_time_steps)
-    for node_label in node_list:
+    for i, node_label in enumerate(node_list):
         node_id = np.where(node_labels == node_label)[0].item()
         x_upp = np.zeros(n_time_steps)
         x_low = np.zeros(n_time_steps)
         for p in range(n_features):
             ax[p].plot(ts, model.X_[:, node_id, p], linestyle,
-                       label=node_labels[node_id])
+                       label=node_labels[node_id], c=node_colors[i])
             for t in range(n_time_steps):
                 se = z_alpha * np.sqrt(model.X_sigma_[t, node_id, p, p])
                 x_upp[t] = model.X_[t, node_id, p] + se
                 x_low[t] = model.X_[t, node_id, p] - se
-            ax[p].fill_between(ts, x_low, x_upp, alpha=alpha)
+            ax[p].fill_between(
+                ts, x_low, x_upp, alpha=alpha, color=node_colors[i])
 
     # accomodate legends and title
-    ax[0].legend(bbox_to_anchor=(1.04, 1), loc='upper left')
+    ax[0].legend(bbox_to_anchor=(1.04, 1), loc='upper left', fontsize=fontsize)
     ax[-1].set_xlabel('t')
     for p in range(n_features):
-        ax[p].set_title('p = {}'.format(p + 1))
-        ax[p].hlines(0, 1, n_time_steps, lw=2, linestyles='dotted')
-        ax[p].set_ylabel('Latent Position [p = {}]'.format(p + 1))
+        #ax[p].set_title('p = {}'.format(p + 1), fontsize=fontsize)
+        ax[p].hlines(0, 1, n_time_steps, lw=2, linestyles='dotted', color='k')
+        ax[p].set_ylabel('Latent Position [p = {}]'.format(p + 1),
+                         fontsize=fontsize)
 
     plt.subplots_adjust(right=0.7)
 
-    return ax
+    return fig, ax
 
 
 def sample_link_probability(model, k, t, i, j, n_reps=1000, random_state=123):
@@ -448,7 +456,8 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
 
 
 def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
-                figsize=(10, 8), include_gridlines=False):
+                fontsize=12,
+                figsize=(12, 6), include_gridlines=False):
     n_layers, n_features = model.lambda_.shape
 
     if layer_labels is None:
@@ -486,18 +495,19 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
             ax.text(lmbda, k - 0.1, txt, horizontalalignment=align)
 
         ax.set_yticks(np.arange(n_layers))
-        ax.set_yticklabels(layer_labels)
+        ax.set_yticklabels(layer_labels, fontsize=fontsize)
         ax.invert_yaxis()
-        ax.set_title('p = {}'.format(p + 1))
+        ax.set_title('p = {}'.format(p + 1), fontsize=fontsize)
 
-        axes.flat[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)')
+        axes.flat[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
+                                 fontsize=fontsize)
 
     x_max = max([ax.get_xlim()[1] for ax in axes.flat])
     for ax in axes.flat:
         if np.all(model.lambda_ >= 0):
             ax.set_xlim(0, x_max)
         else:
-            ax.vlines(0, 0, n_layers - 1, linestyles='dotted')
+            ax.vlines(0, 0, n_layers - 1, linestyles='dotted', color='k')
         sns.despine(ax=ax, bottom=True)
 
     sns.set_style('white')

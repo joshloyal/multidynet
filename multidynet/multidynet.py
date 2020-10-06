@@ -95,8 +95,9 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # omega is initialized by drawing from the prior?
     omega = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
-    # initialize latent space randomly
+    # initialize latent space randomly and center
     X = rng.randn(n_time_steps, n_nodes, n_features)
+    X -= np.mean(X, axis=(0, 1))
 
     # initialize to marginal covariances
     sigma_init = np.eye(n_features)
@@ -179,6 +180,9 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             Y, model.X_, model.X_sigma_, model.X_cross_cov_,
             model.lambda_, model.lambda_sigma_, model.delta_,
             model.omega_, tau_sq_prec, sigma_sq_prec)
+
+        # center latent space
+        model.X_ -= np.mean(model.X_, axis=(0, 1))
 
         # update lambda values
         update_lambdas(
