@@ -194,7 +194,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
         for k in range(n_layers):
             for t in range(n_time_steps):
-                XLX[k, t] = np.dot(model.X_[t] * model.lambda_[k], model.X_[t].T)
+                XLX[k, t] = np.dot(
+                    model.X_[t] * model.lambda_[k], model.X_[t].T)
 
         tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
         sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
