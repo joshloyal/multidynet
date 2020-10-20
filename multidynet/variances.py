@@ -7,7 +7,7 @@ def update_tau_sq(Y, X, X_sigma, a, b):
     a_tau_sq = a + (n_nodes - 1) * n_features
     b_tau_sq = (b +
         np.trace(X_sigma[0, :-1], axis1=1, axis2=2).sum() +
-        (X[0] ** 2).sum())
+        (X[0, :-1] ** 2).sum())
 
     return a_tau_sq, b_tau_sq
 
