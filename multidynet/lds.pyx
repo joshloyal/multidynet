@@ -158,13 +158,22 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             double tau_prec,
                             double sigma_prec):
     cdef size_t i
+    cdef size_t n_time_steps = X.shape[0]
     cdef size_t n_nodes = X.shape[1]
     cdef np.ndarray[double, ndim=2, mode='c'] A
     cdef np.ndarray[double, ndim=3, mode='c'] B
 
-    for i in range(n_nodes):
+    for i in range(n_nodes - 1):
         A, B = calculate_natural_parameters(
             Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)
+
+    # reference node
+    for t in range(n_time_steps):
+        X[t, -1] = -X[t, :-1].sum(axis=0)
+        X_sigma[t, -1] = X_sigma[t, :-1].sum(axis=0)
+
+        if t < (n_time_steps - 1):
+            X_cross_cov[t, -1] = X_cross_cov[t, :-1].sum(axis=0)

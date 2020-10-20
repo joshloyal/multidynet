@@ -97,7 +97,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize latent space randomly and center
     X = rng.randn(n_time_steps, n_nodes, n_features)
-    X -= np.mean(X, axis=(0, 1))
+    for t in range(n_time_steps):
+        X[t] -= np.mean(X[t], axis=0)
+
+        # sum to zero constraint
+        X[t, -1] = -X[t, :-1].sum(axis=0)
 
     # initialize to marginal covariances
     sigma_init = np.eye(n_features)
@@ -165,13 +169,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # coordinate ascent
 
-        # omega updates
+        # update polya-gamma auxiliary variables
         loglik = update_omega(
             Y, model.omega_, model.X_, model.X_sigma_,
             model.lambda_, model.lambda_sigma_,
             model.delta_, model.delta_sigma_)
 
-        # latent trajectory updates
+        # update latent trajectory
         tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
         sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
@@ -181,16 +185,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.lambda_, model.lambda_sigma_, model.delta_,
             model.omega_, tau_sq_prec, sigma_sq_prec)
 
-        # center latent space
-        model.X_ -= np.mean(model.X_, axis=(0, 1))
-
         # update lambda values
         update_lambdas(
             Y, model.X_, model.X_sigma_, model.lambda_,
             model.lambda_sigma_, model.delta_, model.omega_, lambda_var_prior,
             model.lambda_logit_prior_)
 
-        # update node random effects
+        # update social trajectories
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
         for k in range(n_layers):
             for t in range(n_time_steps):
@@ -212,11 +213,11 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
             Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
 
-        # update initial variance of the degree effects
+        # update initial variance of the social trajectories
         model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
             model.delta_, model.delta_sigma_, a_delta, b_delta)
 
-        # update step sizes of the degree effects
+        # update step sizes of the social trajectories
         model.c_sigma_sq_delta_, model.d_sigma_sq_delta_ = update_sigma_sq_delta(
             model.delta_, model.delta_sigma_, model.delta_cross_cov_,
             c_delta, d_delta)
