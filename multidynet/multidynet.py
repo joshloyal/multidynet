@@ -95,9 +95,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # omega is initialized by drawing from the prior?
     omega = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
-    # initialize latent space randomly and center
+    # initialize latent space randomly and center to remove effect
+    # social trajectory initialization
     X = rng.randn(n_time_steps, n_nodes, n_features)
-    X -= np.mean(X, axis=(0, 1))
+    for t in range(n_time_steps):
+        X[t] -= np.mean(X[t], axis=0)
 
     # initialize to marginal covariances
     sigma_init = np.eye(n_features)
@@ -165,13 +167,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # coordinate ascent
 
-        # omega updates
+        # update auxiliary PG variables
         loglik = update_omega(
             Y, model.omega_, model.X_, model.X_sigma_,
             model.lambda_, model.lambda_sigma_,
             model.delta_, model.delta_sigma_)
 
-        # latent trajectory updates
+        # update latent trajectories
         tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
         sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
@@ -181,23 +183,21 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             model.lambda_, model.lambda_sigma_, model.delta_,
             model.omega_, tau_sq_prec, sigma_sq_prec)
 
-        # center latent space
-        model.X_ -= np.mean(model.X_, axis=(0, 1))
-
-        # update lambda values
+        # update homophily parameters
         update_lambdas(
             Y, model.X_, model.X_sigma_, model.lambda_,
             model.lambda_sigma_, model.delta_, model.omega_, lambda_var_prior,
             model.lambda_logit_prior_)
 
-        # update node random effects
+        # update social trajectories
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
         for k in range(n_layers):
             for t in range(n_time_steps):
                 XLX[k, t] = np.dot(
                     model.X_[t] * model.lambda_[k], model.X_[t].T)
 
-        tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
+        #tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
+        tau_sq_prec = 1.0
         sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
 
         update_deltas(
@@ -212,11 +212,11 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
             Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
 
-        # update initial variance of the degree effects
+        # update initial variance of the social trajectories
         model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
             model.delta_, model.delta_sigma_, a_delta, b_delta)
 
-        # update step sizes of the degree effects
+        # update step sizes of the social trajectories
         model.c_sigma_sq_delta_, model.d_sigma_sq_delta_ = update_sigma_sq_delta(
             model.delta_, model.delta_sigma_, model.delta_cross_cov_,
             c_delta, d_delta)
@@ -317,9 +317,9 @@ class DynamicMultilayerNetworkLSM(object):
         output across multiple function calls.
     """
     def __init__(self, n_features=2,
-                 lambda_odds_prior=2,
-                 lambda_var_prior=4,
-                 a=4.0, b=20.0, c=20., d=2.0,
+                 lambda_odds_prior=1,
+                 lambda_var_prior=10,
+                 a=4.0, b=20.0, c=2., d=2.,
                  a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
