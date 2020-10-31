@@ -319,7 +319,7 @@ class DynamicMultilayerNetworkLSM(object):
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
                  a=4.0, b=20.0, c=2., d=2.,
-                 a_delta=4.0, b_delta=2.0, c_delta=20., d_delta=2.0,
+                 a_delta=6.0, b_delta=4.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
