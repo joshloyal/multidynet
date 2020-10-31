@@ -61,9 +61,11 @@ def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
     return ellipses
 
 
-def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
-                 node_color='orangered',
-                 alpha=1.0, size=300, edge_width=0.25, node_labels=None,
+def plot_network(Y, X, X_sigma=None,
+                 z=None, tau_sq=None, normalize=True, figsize=(8, 6),
+                 node_color='orangered', color_distance=False,
+                 alpha=1.0, contour_alpha=0.25,
+                 size=300, edge_width=0.25, node_labels=None,
                  font_size=12, with_labels=False):
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -80,7 +82,10 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
         labels = None
 
     if z is None:
-        node_color = r.ravel() / r.min()
+        if color_distance:
+            node_color = r.ravel() / r.min()
+        else:
+            node_color = np.asarray([node_color] * X.shape[0])
     else:
         encoder = LabelEncoder().fit(z)
         colors = get_colors(z.ravel())
@@ -92,6 +97,12 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
                     markeredgecolor='w', zorder=0)
         ax.plot([0], [0], 'o', markeredgecolor='w', c='w', zorder=0)
 
+    # draw latent position credible interval ellipses
+    if X_sigma is not None:
+        for i in range(X.shape[0]):
+            normal_contour(X[i], X_sigma[i], edgecolor='gray',
+                           facecolor=node_color[i] if z is not None else 'gray',
+                           alpha=contour_alpha, ax=ax, n_std=[2])
 
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
                      node_color=node_color,
@@ -102,16 +113,21 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
                      font_size=font_size,
                      with_labels=with_labels,
                      ax=ax)
-    ax.collections[0].set_edgecolor('white')
+
+    if X_sigma is not None:
+        ax.collections[0].set_edgecolor(None)
+    else:
+        ax.collections[0].set_edgecolor('white')
 
     ax.axis('equal')
     ax.axis('off')
 
-    # draw center of latent space
-    ax.scatter(0, 0, color='k', marker='+', s=200)
-
     # draw normal contour if available
     if tau_sq is not None:
+        # draw center of latent space
+        ax.scatter(0, 0, color='k', marker='+', s=200)
+
+        # draw two standard deviation contour
         normal_contour([0, 0], tau_sq * np.eye(X.shape[1]), n_std=[1],
                        linestyle='--', edgecolor='k',
                        facecolor='none', zorder=1, ax=ax)
@@ -123,9 +139,11 @@ def plot_network(Y, X, z=None, tau_sq=None, normalize=True, figsize=(8, 6),
     return fig, ax
 
 
-def make_network_animation(filename, Y, X, k=0, z=None, tau_sq=None, normalize=True,
+def make_network_animation(filename, Y, X, X_sigma=None,
+                           k=0, z=None, tau_sq=None, normalize=True,
                            figsize=(8, 6), node_color='orangered',
-                           alpha=1.0, size=300, edge_width=0.25,
+                           alpha=1.0, contour_alpha=0.25,
+                           size=300, edge_width=0.25,
                            node_labels=None, font_size=12, with_labels=False,
                            layer_labels=None, time_labels=None,
                            title_fmt='{}, {}', border=0.5, duration=1):
@@ -147,9 +165,12 @@ def make_network_animation(filename, Y, X, k=0, z=None, tau_sq=None, normalize=T
 
         pngs = []
         for t in range(Y.shape[1]):
-            fig, ax = plot_network(Y[k, t], X[t], z=z, tau_sq=tau_sq,
+            fig, ax = plot_network(Y[k, t], X[t],
+                X_sigma=X_sigma[t] if X_sigma is not None else None,
+                z=z, tau_sq=tau_sq,
                 normalize=normalize, figsize=figsize, node_color=node_color,
-                alpha=alpha, size=size, edge_width=edge_width,
+                alpha=alpha, contour_alpha=contour_alpha,
+                size=size, edge_width=edge_width,
                 node_labels=node_labels, font_size=font_size,
                 with_labels=with_labels,)
             ax.set_title(title_fmt.format(layer_labels[k], time_labels[t]))

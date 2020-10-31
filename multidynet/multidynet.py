@@ -196,8 +196,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                 XLX[k, t] = np.dot(
                     model.X_[t] * model.lambda_[k], model.X_[t].T)
 
-        #tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
-        tau_sq_prec = 1.0
+        tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
         sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
 
         update_deltas(
@@ -320,7 +319,7 @@ class DynamicMultilayerNetworkLSM(object):
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
                  a=4.0, b=20.0, c=2., d=2.,
-                 a_delta=4.0, b_delta=20.0, c_delta=20., d_delta=2.0,
+                 a_delta=4.0, b_delta=2.0, c_delta=20., d_delta=2.0,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
