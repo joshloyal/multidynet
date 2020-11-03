@@ -10,6 +10,9 @@ import numpy as np
 cimport numpy as np
 
 
+ctypedef np.int_t INT_t
+
+
 def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, :, ::1] XLX,
                                  double[:, :, ::1] delta,
@@ -115,7 +118,9 @@ def update_deltas(const double[:, :, :, ::1] Y,
                   double[:, :, :, ::1] XLX,
                   double[:, :, :, ::1] omega,
                   double tau_prec,
-                  double sigma_prec):
+                  double sigma_prec,
+                  INT_t[:] reference_nodes,
+                  bint include_reference):
     cdef size_t k, i
     cdef size_t n_layers = Y.shape[0]
     cdef size_t n_nodes = Y.shape[2]
@@ -124,6 +129,9 @@ def update_deltas(const double[:, :, :, ::1] Y,
 
     for k in range(n_layers):
         for i in range(n_nodes):
+            if include_reference and reference_nodes[k] == i:
+                continue
+
             A, B = calculate_natural_parameters(
                 Y, XLX, delta, omega, k, i)
 

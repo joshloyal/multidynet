@@ -12,9 +12,12 @@ def update_tau_sq(Y, X, X_sigma, a, b):
     return a_tau_sq, b_tau_sq
 
 
-def update_tau_sq_delta(delta, delta_sigma, a, b):
+def update_tau_sq_delta(delta, delta_sigma, a, b, include_reference):
     n_layers, _, n_nodes = delta.shape
-    a_tau_sq = a + n_nodes * n_layers
+    if include_reference:
+        a_tau_sq = a + (n_nodes - 1) * n_layers
+    else:
+        a_tau_sq = a + n_nodes * n_layers
     b_tau_sq = (b +
         (delta_sigma[:, 0, :] + delta[:, 0, :] ** 2).sum())
 
@@ -43,11 +46,15 @@ def update_sigma_sq(Y, X, X_sigma, X_cross_cov, c, d):
     return c_sigma_sq, d_sigma_sq
 
 
-def update_sigma_sq_delta(delta, delta_sigma, delta_cross_cov, c, d):
+def update_sigma_sq_delta(delta, delta_sigma, delta_cross_cov, c, d, include_reference):
     n_layers, n_time_steps, n_nodes = delta.shape
 
-    c_sigma_sq = (c +
-        n_nodes * (n_time_steps - 1) * n_layers)
+    if include_reference:
+        c_sigma_sq = (c +
+            (n_nodes - 1) * (n_time_steps - 1) * n_layers)
+    else:
+        c_sigma_sq = (c +
+            n_nodes * (n_time_steps - 1) * n_layers)
     d_sigma_sq = d
     for t in range(1, n_time_steps):
         d_sigma_sq += delta_sigma[:, t, :].sum()
