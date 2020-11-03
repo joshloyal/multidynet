@@ -239,7 +239,7 @@ def plot_social_trajectories(
         fig = None
 
     if node_labels is None:
-        node_labels = [str(i + 1) for i in range(model.X_.shape[1])]
+        node_labels = [str(i + 1) for i in range(model.delta_.shape[2])]
     node_labels = np.asarray(node_labels)
 
 

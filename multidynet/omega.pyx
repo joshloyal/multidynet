@@ -21,11 +21,11 @@ def update_omega_single(double[::1] Xit,
                         double deltaki,
                         double deltakj,
                         double deltaki_sigma,
-                        double deltakj_sigma):
+                        double deltakj_sigma,
+                        size_t n_features):
     cdef double psi_sq = 0.
     cdef double c_omega = 0.
     cdef double omega = 0.
-    cdef size_t n_features = Xit.shape[0]
     cdef int p, q = 0
 
     # calculate the natural parameter
@@ -56,11 +56,11 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                           double[:, ::1] lmbda,
                           double[:, :, ::1] lmbda_sigma,
                           double[:, :, ::1] delta,
-                          double[:, :, ::1] delta_sigma):
+                          double[:, :, ::1] delta_sigma,
+                          size_t n_features):
     cdef size_t n_layers = omega.shape[0]
     cdef size_t n_time_steps = omega.shape[1]
     cdef size_t n_nodes = omega.shape[2]
-    cdef size_t n_features = lmbda.shape[1]
     cdef size_t k, t, i, j, p
     cdef double loglik = 0.
     cdef double psi, psi_sq = 0.
@@ -74,7 +74,8 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                             X[t, i], X_sigma[t, i], X[t, j], X_sigma[t, j],
                             lmbda[k], lmbda_sigma[k],
                             delta[k, t, i], delta[k, t, j],
-                            delta_sigma[k, t, i], delta_sigma[k, t, j])
+                            delta_sigma[k, t, i], delta_sigma[k, t, j],
+                            n_features)
 
                         omega[k, t, j, i] = omega[k, t, i, j]
 

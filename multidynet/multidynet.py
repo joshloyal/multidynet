@@ -10,12 +10,15 @@ from sklearn.utils import check_array, check_random_state
 from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 
+from .dic import calculate_dic
+from .waic import calculate_waic
 from .omega import update_omega
 from .lds import update_latent_positions
 from .deltas_lds import update_deltas
 from .lmbdas import update_lambdas
 from .variances import update_tau_sq, update_sigma_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
+from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
 
 
@@ -97,29 +100,37 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize latent space randomly and center to remove effect
     # social trajectory initialization
-    X = rng.randn(n_time_steps, n_nodes, n_features)
-    for t in range(n_time_steps):
-        X[t] -= np.mean(X[t], axis=0)
+    if n_features > 0:
+        X = rng.randn(n_time_steps, n_nodes, n_features)
+        for t in range(n_time_steps):
+            X[t] -= np.mean(X[t], axis=0)
 
-    # initialize to marginal covariances
-    sigma_init = np.eye(n_features)
-    X_sigma = np.tile(
-        sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
+        # initialize to marginal covariances
+        sigma_init = np.eye(n_features)
+        X_sigma = np.tile(
+            sigma_init[None, None], reps=(n_time_steps, n_nodes, 1, 1))
 
-    # initialize cross-covariances
-    cross_init = np.eye(n_features)
-    X_cross_cov = np.tile(
-        cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
+        # initialize cross-covariances
+        cross_init = np.eye(n_features)
+        X_cross_cov = np.tile(
+            cross_init[None, None], reps=(n_time_steps - 1, n_nodes, 1, 1))
 
-    # initialize to prior means
-    lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
-    lmbda[0] = (
-        2 * (lambda_odds_prior / (1. + lambda_odds_prior)) - 1)
-    lmbda_sigma = lambda_var_prior * np.ones(
-        (n_layers, n_features, n_features))
-    lmbda_sigma[0] = (
-        (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
-    lmbda_logit_prior = np.log(lambda_odds_prior)
+        # initialize to prior means
+        lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
+        lmbda[0] = (
+            2 * (lambda_odds_prior / (1. + lambda_odds_prior)) - 1)
+        lmbda_sigma = lambda_var_prior * np.ones(
+            (n_layers, n_features, n_features))
+        lmbda_sigma[0] = (
+            (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
+        lmbda_logit_prior = np.log(lambda_odds_prior)
+    else:
+        X = None
+        X_sigma = None
+        X_cross_cov = None
+        lmbda = None
+        lmbda_sigma = None
+        lmbda_logit_prior = np.log(lambda_odds_prior)
 
     # initialize node-effects based on degree
     delta = initialize_node_effects(Y)
@@ -171,30 +182,32 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         loglik = update_omega(
             Y, model.omega_, model.X_, model.X_sigma_,
             model.lambda_, model.lambda_sigma_,
-            model.delta_, model.delta_sigma_)
+            model.delta_, model.delta_sigma_,
+            n_features)
 
         # update latent trajectories
         tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
         sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
 
-        update_latent_positions(
-            Y, model.X_, model.X_sigma_, model.X_cross_cov_,
-            model.lambda_, model.lambda_sigma_, model.delta_,
-            model.omega_, tau_sq_prec, sigma_sq_prec)
-
-        # update homophily parameters
-        update_lambdas(
-            Y, model.X_, model.X_sigma_, model.lambda_,
-            model.lambda_sigma_, model.delta_, model.omega_, lambda_var_prior,
-            model.lambda_logit_prior_)
-
-        # update social trajectories
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
-        for k in range(n_layers):
-            for t in range(n_time_steps):
-                XLX[k, t] = np.dot(
-                    model.X_[t] * model.lambda_[k], model.X_[t].T)
+        if n_features > 0:
+            update_latent_positions(
+                Y, model.X_, model.X_sigma_, model.X_cross_cov_,
+                model.lambda_, model.lambda_sigma_, model.delta_,
+                model.omega_, tau_sq_prec, sigma_sq_prec)
+
+            # update homophily parameters
+            update_lambdas(
+                Y, model.X_, model.X_sigma_, model.lambda_,
+                model.lambda_sigma_, model.delta_, model.omega_,
+                lambda_var_prior, model.lambda_logit_prior_)
+
+            # update social trajectories
+            for k in range(n_layers):
+                for t in range(n_time_steps):
+                    XLX[k, t] = np.dot(
+                        model.X_[t] * model.lambda_[k], model.X_[t].T)
 
         tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
         sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
@@ -204,12 +217,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             XLX, model.omega_, tau_sq_prec, sigma_sq_prec)
 
         # update initial variance of the latent space
-        model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
-            Y, model.X_, model.X_sigma_, a, b)
+        if n_features > 0:
+            model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
+                Y, model.X_, model.X_sigma_, a, b)
 
-        # update step sizes of the latent space
-        model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
-            Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
+            # update step sizes of the latent space
+            model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
+                Y, model.X_, model.X_sigma_, model.X_cross_cov_, c, d)
 
         # update initial variance of the social trajectories
         model.a_tau_sq_delta_, model.b_tau_sq_delta_ = update_tau_sq_delta(
@@ -233,16 +247,18 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
 
 def calculate_probabilities(X, lmbda, delta):
-    n_layers = lmbda.shape[0]
-    n_time_steps = X.shape[0]
-    n_nodes = X.shape[1]
+    n_layers = delta.shape[0]
+    n_time_steps = delta.shape[1]
+    n_nodes = delta.shape[2]
 
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             deltakt = delta[k, t].reshape(-1, 1)
-            eta = np.add(deltakt, deltakt.T) + np.dot(X[t] * lmbda[k], X[t].T)
+            eta = np.add(deltakt, deltakt.T)
+            if X is not None:
+                eta += np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
     return probas
@@ -354,13 +370,15 @@ class DynamicMultilayerNetworkLSM(object):
                 "If there is only a single layer, then reshape Y with "
                 "Y = np.expand_dims(Y, axis=0) and re-fit.".format(Y.ndim))
 
+        self.n_features_ = self.n_features if self.n_features is not None else 0
+
         random_state = check_random_state(self.random_state)
 
         # run the elbo optimization over different initializations
         seeds = random_state.randint(np.iinfo(np.int32).max, size=self.n_init)
         verbose = True if self.n_init == 1 else False
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
-                Y, self.n_features, self.lambda_odds_prior,
+                Y, self.n_features_, self.lambda_odds_prior,
                 self.lambda_var_prior,
                 self.a, self.b, self.c, self.d,
                 self.a_delta, self.b_delta, self.c_delta, self.d_delta,
@@ -389,6 +407,38 @@ class DynamicMultilayerNetworkLSM(object):
         # calculate in-sample AUC
         self.auc_ = calculate_auc(Y, self.probas_)
 
+        # calculate in-sample log-likelihood
+        self.loglik_ = log_likelihood(
+            Y, self.X_, self.lambda_, self.delta_, self.n_features_)
+
+        # information criteria
+
+        # AIC
+        self.p_aic_ = np.prod(self.delta_.shape)
+        if self.n_features_ > 0:
+            self.p_aic_ += np.prod(self.X_.shape)
+            self.p_aic_ += np.prod(self.lambda_.shape)
+        self.aic_ = -2 * self.loglik_ + 2 * self.p_aic_
+
+        # BIC
+        n_layers, n_time_steps, n_nodes = self.delta_.shape
+        logn = (np.log(0.5 * n_nodes) + np.log(n_nodes - 1) +
+            np.log(n_layers) + np.log(n_time_steps))
+        self.p_bic_ = logn * np.prod(self.delta_.shape)
+        if self.n_features_ > 0:
+            self.p_bic_ += logn * np.prod(self.X_.shape)
+            self.p_bic_ += logn * np.prod(self.lambda_.shape)
+        self.bic_ = -2 * self.loglik_ + self.p_bic_
+
+        # DIC (approximate with posterior samples)
+        self.dic_, self.p_dic_ = calculate_dic(
+            self, random_state=random_state)
+
+        # WAIC (only supported for no missing edges)
+        if not np.any(Y == -1):
+            self.waic_, self.p_waic_ = calculate_waic(
+                self, Y, random_state=random_state)
+
         return self
 
     def _set_parameters(self, model):
@@ -398,21 +448,26 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_sigma_ = model.X_sigma_
         self.X_cross_cov_ = model.X_cross_cov_
 
-        self.lambda_ = model.lambda_
-        self.lambda_[0] = np.sign(model.lambda_[0])
-        self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
-        self.lambda_sigma_ = model.lambda_sigma_
-
-        self.delta_ = model.delta_
-        self.delta_sigma_ = model.delta_sigma_
-        self.delta_cross_cov_ = model.delta_cross_cov_
-
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
         self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
         self.c_sigma_sq_ = model.c_sigma_sq_
         self.d_sigma_sq_ = model.d_sigma_sq_
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
+
+        self.lambda_ = model.lambda_
+
+        if self.lambda_ is not None:
+            self.lambda_[0] = np.sign(model.lambda_[0])
+            self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
+        else:
+            self.lambda_proba_ = None
+
+        self.lambda_sigma_ = model.lambda_sigma_
+
+        self.delta_ = model.delta_
+        self.delta_sigma_ = model.delta_sigma_
+        self.delta_cross_cov_ = model.delta_cross_cov_
 
         self.a_tau_sq_delta_ = model.a_tau_sq_delta_
         self.b_tau_sq_delta_ = model.b_tau_sq_delta_
@@ -424,6 +479,7 @@ class DynamicMultilayerNetworkLSM(object):
 
         self.logp_ = model.logp_
         self.converged_ = model.converged_
+
 
 
 def fit_layer(Y, k, **est_kwargs):

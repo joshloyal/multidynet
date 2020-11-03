@@ -15,8 +15,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
                                                  random_state=None):
     rng = check_random_state(random_state)
 
-    n_time_steps, n_nodes, _ = X.shape
-    n_layers = lmbda.shape[0]
+    n_layers, n_time_steps, n_nodes = delta.shape
 
     if delta is None:
         delta = np.zeros((n_layers, n_time_steps, n_nodes), dtype=np.float64)
@@ -28,7 +27,9 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
         for t in range(n_time_steps):
             # sample the adjacency matrix
             deltak = delta[k, t].reshape(-1, 1)
-            eta = np.add(deltak, deltak.T) + np.dot(X[t] * lmbda[k], X[t].T)
+            eta = np.add(deltak, deltak.T)
+            if X is not None:
+                eta += np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
             Y[k, t] = rng.binomial(1, probas[k, t]).astype(np.int)
@@ -90,20 +91,27 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     rng = check_random_state(random_state)
 
     # construct latent features
-    X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
-    X[0] = np.sqrt(tau_sq) * rng.randn(n_nodes, n_features)
-    for t in range(1, n_time_steps):
-        X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
-    X -= np.mean(X, axis=(0, 1))
+    n_features = n_features if n_features is not None else 0
 
-    # sample assortativity parameters from a U(-2, 2)
-    lmbda = np.zeros((n_layers, n_features))
-    lmbda[0] = rng.choice([-1, 1], size=n_features)
-    lmbda[1:] = rng.uniform(
-        -2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+    if n_features > 0:
+        X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
+        X[0] = np.sqrt(tau_sq) * rng.randn(n_nodes, n_features)
+        for t in range(1, n_time_steps):
+            X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
+        X -= np.mean(X, axis=(0, 1))
+
+        # sample assortativity parameters from a U(-2, 2)
+        lmbda = np.zeros((n_layers, n_features))
+        lmbda[0] = rng.choice([-1, 1], size=n_features)
+        lmbda[1:] = rng.uniform(
+            -2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+    else:
+        X = None
+        lmbda = None
+
 
     # sample degree effects from a U(-4, 4)
-    delta = np.zeros((n_layers,  n_time_steps, n_nodes))
+    delta = np.zeros((n_layers, n_time_steps, n_nodes))
     for k in range(n_layers):
         delta[k, 0] = rng.uniform(-4, 4, n_nodes)
         for t in range(1, n_time_steps):
