@@ -13,15 +13,15 @@ cimport numpy as np
 
 
 cpdef double log_likelihood(double[:, :, :, ::1] Y,
-                            double[:, :, :] X,
-                            double[:, :] lmbda,
-                            double[:, :] delta) nogil:
+                            double[:, :, ::1] X,
+                            double[:, ::1] lmbda,
+                            double[:, :, ::1] delta,
+                            size_t n_features) nogil:
 
     cdef size_t k, t, i, j, p, q
     cdef size_t n_layers = Y.shape[0]
     cdef size_t n_time_steps = Y.shape[1]
-    cdef size_t n_nodes = X.shape[1]
-    cdef size_t n_features = X.shape[2]
+    cdef size_t n_nodes = delta.shape[2]
     cdef double eta = 0.
     cdef double loglik = 0.
 
@@ -29,10 +29,10 @@ cpdef double log_likelihood(double[:, :, :, ::1] Y,
         for t in range(n_time_steps):
             for i in range(n_nodes):
                 for j in range(i):
-                    eta = delta[k, i] + delta[k, j]
-                    for p in range(n_features):
-                        eta += lmbda[k, p] * X[t, i, p] * X[t, j, p]
-                    loglik += Y[k, t, i, j] * eta - log(1 + exp(eta))
+                    if Y[k, t, i, j] != -1.:
+                        eta = delta[k, t, i] + delta[k, t, j]
+                        for p in range(n_features):
+                            eta += lmbda[k, p] * X[t, i, p] * X[t, j, p]
+                        loglik += Y[k, t, i, j] * eta - log(1 + exp(eta))
 
     return loglik
-
