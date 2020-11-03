@@ -86,19 +86,34 @@ def initialize_node_effects(Y, include_reference=False):
         for t in range(n_time_steps):
             delta[k, t] = initialize_node_effects_single(Y[k, t])
 
+    # initial sociality set to half network density on logit scale
+    density = Y.sum(axis=(1, 2, 3))  / (n_nodes * (n_nodes - 1) * n_time_steps)
+    init_delta_priors = 0.5 * np.log(density / (1 - density))
+
     reference_nodes = np.zeros(n_layers, dtype=np.int64)
     if include_reference:
-        # FIXME: does not support missing values coded as -1!
+        # FIXME: does not support missing values coded as -1
         d_avg = Y.sum(axis=3).mean(axis=1)
         for k in range(n_layers):
             # reference node set to node with the median time-averaged degree
             node_id = np.argmin(np.abs(d_avg[k] - np.median(d_avg[k])))
 
-            # shift node effects and store reference node
+            # shift node effects so that reference is half the
+            # empirical density on the logit scale (independent erdos-renyi)
+            # FIXME: does not support missing values coded as -1
+            #density_k = Y[k].sum(axis=(1, 2)) / (n_nodes * (n_nodes - 1))
+            #density_k = 0.5 * np.log(density_k / (1 - density_k))
+            #delta[k] = (delta[k].T - delta[k, :, node_id] + density_k).T
+
             delta[k] = (delta[k].T - delta[k, :, node_id]).T
+            #density_k = Y[k].sum() / (n_nodes * (n_nodes - 1) * n_time_steps)
+            #delta[k] += 0.5 * np.log(density_k / (1 - density_k))
+            delta[k] += init_delta_priors[k]
+
+            # store reference node
             reference_nodes[k] = node_id
 
-    return delta, reference_nodes
+    return delta, reference_nodes, init_delta_priors
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
@@ -146,7 +161,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         lmbda_logit_prior = np.log(lambda_odds_prior)
 
     # initialize node-effects based on degree
-    delta, reference_nodes = initialize_node_effects(
+    delta, reference_nodes, init_delta_priors = initialize_node_effects(
         Y, include_reference=include_reference)
     delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
     delta_cross_cov = np.ones((n_layers, n_time_steps - 1, n_nodes))
@@ -167,7 +182,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     c_sigma_sq_delta = c_delta
     d_sigma_sq_delta = d_delta
 
-    return ModelParameters(
+    return (ModelParameters(
         omega=omega, X=X, X_sigma=X_sigma, X_cross_cov=X_cross_cov,
         lmbda=lmbda, lmbda_sigma=lmbda_sigma,
         lmbda_logit_prior=lmbda_logit_prior,
@@ -175,7 +190,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
         d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
         c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta,
-        reference_nodes=reference_nodes)
+        reference_nodes=reference_nodes), init_delta_priors)
 
 
 
@@ -189,7 +204,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     loglik = -np.infty
 
     # initialize parameters of the model
-    model = initialize_parameters(
+    model, init_delta_priors = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior,
         a, b, c, d, a_delta, b_delta, c_delta, d_delta,
         include_reference, random_state)
@@ -235,7 +250,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         update_deltas(
             Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
-            XLX, model.omega_, tau_sq_prec, sigma_sq_prec,
+            XLX, model.omega_, init_delta_priors, tau_sq_prec, sigma_sq_prec,
             model.reference_nodes_, include_reference)
 
         # update initial variance of the latent space
