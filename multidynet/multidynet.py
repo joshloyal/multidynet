@@ -20,7 +20,7 @@ from .variances import update_tau_sq, update_sigma_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
 from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
-
+from .network_statistics import calculate_average_degree, calculate_densities
 
 __all__ = ['DynamicMultilayerNetworkLSM']
 
@@ -32,7 +32,7 @@ class ModelParameters(object):
                  delta, delta_sigma, delta_cross_cov,
                  a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq,
                  a_tau_sq_delta, b_tau_sq_delta, c_sigma_sq_delta,
-                 d_sigma_sq_delta, reference_nodes):
+                 d_sigma_sq_delta, init_delta_priors, reference_nodes):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
@@ -51,6 +51,7 @@ class ModelParameters(object):
         self.b_tau_sq_delta_ = b_tau_sq_delta
         self.c_sigma_sq_delta_ = c_sigma_sq_delta
         self.d_sigma_sq_delta_ = d_sigma_sq_delta
+        self.init_delta_priors_ = init_delta_priors
         self.reference_nodes_ = reference_nodes
         self.converged_ = False
         self.logp_ = []
@@ -87,13 +88,15 @@ def initialize_node_effects(Y, include_reference=False):
             delta[k, t] = initialize_node_effects_single(Y[k, t])
 
     # initial sociality set to half network density on logit scale
-    density = Y.sum(axis=(1, 2, 3))  / (n_nodes * (n_nodes - 1) * n_time_steps)
+    #density = Y.sum(axis=(1, 2, 3))  / (n_nodes * (n_nodes - 1) * n_time_steps)
+    density = calculate_densities(Y)
     init_delta_priors = 0.5 * np.log(density / (1 - density))
 
     reference_nodes = np.zeros(n_layers, dtype=np.int64)
     if include_reference:
         # FIXME: does not support missing values coded as -1
-        d_avg = Y.sum(axis=3).mean(axis=1)
+        #d_avg = Y.sum(axis=3).mean(axis=1)
+        d_avg = calculate_average_degree(Y)
         for k in range(n_layers):
             # reference node set to node with the median time-averaged degree
             node_id = np.argmin(np.abs(d_avg[k] - np.median(d_avg[k])))
@@ -182,7 +185,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     c_sigma_sq_delta = c_delta
     d_sigma_sq_delta = d_delta
 
-    return (ModelParameters(
+    return ModelParameters(
         omega=omega, X=X, X_sigma=X_sigma, X_cross_cov=X_cross_cov,
         lmbda=lmbda, lmbda_sigma=lmbda_sigma,
         lmbda_logit_prior=lmbda_logit_prior,
@@ -190,7 +193,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
         d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
         c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta,
-        reference_nodes=reference_nodes), init_delta_priors)
+        init_delta_priors=init_delta_priors,
+        reference_nodes=reference_nodes)
 
 
 
@@ -204,7 +208,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     loglik = -np.infty
 
     # initialize parameters of the model
-    model, init_delta_priors = initialize_parameters(
+    model = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior,
         a, b, c, d, a_delta, b_delta, c_delta, d_delta,
         include_reference, random_state)
@@ -250,7 +254,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         update_deltas(
             Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
-            XLX, model.omega_, init_delta_priors, tau_sq_prec, sigma_sq_prec,
+            XLX, model.omega_, model.init_delta_priors_,
+            tau_sq_prec, sigma_sq_prec,
             model.reference_nodes_, include_reference)
 
         # update initial variance of the latent space
@@ -511,6 +516,7 @@ class DynamicMultilayerNetworkLSM(object):
         self.delta_ = model.delta_
         self.delta_sigma_ = model.delta_sigma_
         self.delta_cross_cov_ = model.delta_cross_cov_
+        self.init_delta_priors_ = model.init_delta_priors_
         self.reference_nodes_ = model.reference_nodes_
 
         self.a_tau_sq_delta_ = model.a_tau_sq_delta_
@@ -521,7 +527,7 @@ class DynamicMultilayerNetworkLSM(object):
         self.sigma_sq_delta_ = (
             self.d_sigma_sq_delta_ / (self.c_sigma_sq_delta_ - 1))
 
-        self.logp_ = model.logp_
+        self.logp_ = np.asarray(model.logp_)
         self.converged_ = model.converged_
 
 
