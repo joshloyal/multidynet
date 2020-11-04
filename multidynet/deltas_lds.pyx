@@ -55,7 +55,7 @@ def kalman_filter(double[:] A,
     # t = 1
     sigma_inv[0] = tau_prec + B[0]
     sigma[0] = 1. / sigma_inv[0]
-    mu[0] = sigma[0] * (A[0] + initial_prior)
+    mu[0] = sigma[0] * (A[0] + initial_prior * tau_prec)
 
     for t in range(1, n_time_steps):
         sigma_star[t-1] = 1. / (sigma_prec + sigma_inv[t-1])

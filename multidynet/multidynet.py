@@ -88,14 +88,12 @@ def initialize_node_effects(Y, include_reference=False):
             delta[k, t] = initialize_node_effects_single(Y[k, t])
 
     # initial sociality set to half network density on logit scale
-    #density = Y.sum(axis=(1, 2, 3))  / (n_nodes * (n_nodes - 1) * n_time_steps)
     density = calculate_densities(Y)
     init_delta_priors = 0.5 * np.log(density / (1 - density))
 
     reference_nodes = np.zeros(n_layers, dtype=np.int64)
     if include_reference:
         # FIXME: does not support missing values coded as -1
-        #d_avg = Y.sum(axis=3).mean(axis=1)
         d_avg = calculate_average_degree(Y)
         for k in range(n_layers):
             # reference node set to node with the median time-averaged degree
@@ -109,8 +107,6 @@ def initialize_node_effects(Y, include_reference=False):
             #delta[k] = (delta[k].T - delta[k, :, node_id] + density_k).T
 
             delta[k] = (delta[k].T - delta[k, :, node_id]).T
-            #density_k = Y[k].sum() / (n_nodes * (n_nodes - 1) * n_time_steps)
-            #delta[k] += 0.5 * np.log(density_k / (1 - density_k))
             delta[k] += init_delta_priors[k]
 
             # store reference node
