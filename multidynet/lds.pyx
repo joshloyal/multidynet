@@ -16,6 +16,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, ::1] lmbda,
                                  double[:, :, ::1] lmbda_sigma,
                                  double[:, :, ::1] delta,
+                                 double[:] intercepts,
                                  double[:, :, :, ::1] omega,
                                  int i):
     cdef size_t t, k, j, p, q
@@ -38,6 +39,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                             lmbda[k, p] * X[t, j, p] * (
                                 Y[k, t, i, j] - 0.5 -
                                     omega[k, t, i, j] * (
+                                         intercepts[k] +
                                          delta[k, t, i] + delta[k, t, j])))
 
                         for q in range(p + 1):
@@ -154,6 +156,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] lmbda_sigma,
                             double[:, :, ::1] delta,
+                            double[:] intercepts,
                             double[:, :, :, ::1] omega,
                             double tau_prec,
                             double sigma_prec):
@@ -164,7 +167,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
-            Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
+            Y, X, X_sigma, lmbda, lmbda_sigma, delta, intercepts, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)

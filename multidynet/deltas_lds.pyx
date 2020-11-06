@@ -16,6 +16,7 @@ ctypedef np.int_t INT_t
 def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, :, ::1] XLX,
                                  double[:, :, ::1] delta,
+                                 double[:] intercepts,
                                  double[:, :, :, ::1] omega,
                                  int k, int i):
     cdef size_t t, j
@@ -30,7 +31,8 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
             if j != i and Y[k, t, i, j] != -1.0:
                 eta1[t] += (Y[k, t, i, j] - 0.5 -
                             omega[k, t, i, j] * (
-                                 delta[k, t, j] + XLX[k, t, i, j]))
+                                 intercepts[k] + delta[k, t, j] +
+                                 XLX[k, t, i, j]))
 
                 eta2[t] += omega[k, t, i, j]
 
@@ -39,7 +41,6 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
 
 def kalman_filter(double[:] A,
                   double[:] B,
-                  double initial_prior,
                   double tau_prec,
                   double sigma_prec):
     cdef size_t t
@@ -55,7 +56,8 @@ def kalman_filter(double[:] A,
     # t = 1
     sigma_inv[0] = tau_prec + B[0]
     sigma[0] = 1. / sigma_inv[0]
-    mu[0] = sigma[0] * (A[0] + initial_prior * tau_prec)
+    #mu[0] = sigma[0] * (A[0] + initial_prior * tau_prec)
+    mu[0] = sigma[0] * A[0]
 
     for t in range(1, n_time_steps):
         sigma_star[t-1] = 1. / (sigma_prec + sigma_inv[t-1])
@@ -69,7 +71,6 @@ def kalman_filter(double[:] A,
 
 def kalman_smoother(double[:] A,
                     double[:] B,
-                    double initial_prior,
                     double tau_prec,
                     double sigma_prec):
     cdef size_t t
@@ -91,7 +92,7 @@ def kalman_smoother(double[:] A,
 
     # run the filter for the forward message variables
     mu, sigma, sigma_inv, sigma_star = kalman_filter(
-        A, B, initial_prior, tau_prec, sigma_prec)
+        A, B, tau_prec, sigma_prec)
 
     # run the smoother
     mean[n_time_steps - 1] = mu[n_time_steps - 1]
@@ -118,9 +119,9 @@ def update_deltas(const double[:, :, :, ::1] Y,
                   np.ndarray[double, ndim=3, mode='c'] delta,
                   np.ndarray[double, ndim=3, mode='c'] delta_sigma,
                   np.ndarray[double, ndim=3, mode='c'] delta_cross_cov,
+                  double[:] intercepts,
                   double[:, :, :, ::1] XLX,
                   double[:, :, :, ::1] omega,
-                  double[:] initial_priors,
                   double tau_prec,
                   double sigma_prec,
                   INT_t[:] reference_nodes,
@@ -137,7 +138,7 @@ def update_deltas(const double[:, :, :, ::1] Y,
                 continue
 
             A, B = calculate_natural_parameters(
-                Y, XLX, delta, omega, k, i)
+                Y, XLX, delta, intercepts, omega, k, i)
 
             delta[k, :, i], delta_sigma[k, :, i], delta_cross_cov[k, :, i] = (
-                kalman_smoother(A, B, initial_priors[k], tau_prec, sigma_prec))
+                kalman_smoother(A, B, tau_prec, sigma_prec))

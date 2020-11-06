@@ -22,6 +22,7 @@ def update_omega_single(double[::1] Xit,
                         double deltakj,
                         double deltaki_sigma,
                         double deltakj_sigma,
+                        double interceptk,
                         size_t n_features):
     cdef double psi_sq = 0.
     cdef double c_omega = 0.
@@ -32,8 +33,10 @@ def update_omega_single(double[::1] Xit,
     psi_sq += deltaki_sigma + deltaki ** 2
     psi_sq += deltakj_sigma + deltakj ** 2
     psi_sq += 2 * deltaki * deltakj
+    psi_sq += interceptk ** 2
+    psi_sq += 2 * interceptk * (deltaki + deltakj)
     for p in range(n_features):
-        psi_sq += (2 * (deltaki + deltakj) *
+        psi_sq += (2 * (interceptk + deltaki + deltakj) *
                     lmbdak[p] * Xit[p] * Xjt[p])
 
         for q in range(n_features):
@@ -57,6 +60,7 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                           double[:, :, ::1] lmbda_sigma,
                           double[:, :, ::1] delta,
                           double[:, :, ::1] delta_sigma,
+                          double[:] intercepts,
                           size_t n_features):
     cdef size_t n_layers = omega.shape[0]
     cdef size_t n_time_steps = omega.shape[1]
@@ -75,11 +79,11 @@ cpdef double update_omega(const double[:, :, :, ::1] Y,
                             lmbda[k], lmbda_sigma[k],
                             delta[k, t, i], delta[k, t, j],
                             delta_sigma[k, t, i], delta_sigma[k, t, j],
-                            n_features)
+                            intercepts[k], n_features)
 
                         omega[k, t, j, i] = omega[k, t, i, j]
 
-                        psi = delta[k, t, i] + delta[k, t, j]
+                        psi = intercepts[k] + delta[k, t, i] + delta[k, t, j]
                         for p in range(n_features):
                             psi += lmbda[k, p] * X[t, i, p] * X[t, j, p]
 

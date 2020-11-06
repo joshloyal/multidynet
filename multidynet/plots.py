@@ -225,7 +225,8 @@ def plot_static_sociability(model, k=0, node_labels=None, layer_label=None,
 
 
 def plot_social_trajectories(
-                     model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
+                     model, k=0, q_alpha=0.05, center_trajectories=False,
+                     node_list=None, node_colors=None,
                      node_labels=None, layer_label=None, plot_hline=True,
                      xlabel='Time', alpha=0.15, fill_alpha=0.2, line_width=3,
                      ax=None, figsize=(10, 6), label_offset=1, fontsize=12,
@@ -246,6 +247,10 @@ def plot_social_trajectories(
     for i in range(n_nodes):
         ax.plot(model.delta_[k, :, i].T, 'k-', alpha=alpha)
 
+    delta = model.delta_[k].copy()
+    if center_trajectories:
+        delta -= model.init_delta_priors_[k]
+
     if node_list is not None:
         node_list = np.asarray(node_list)
         if node_colors is None:
@@ -253,11 +258,11 @@ def plot_social_trajectories(
 
         for i, node_label in enumerate(node_list):
             node_id = np.where(node_labels == node_label)[0].item()
-            ax.plot(model.delta_[k, :, node_id].T, '-',
+            ax.plot(delta[:, node_id].T, '-',
                     lw=line_width, c=node_colors[i])
             ax.annotate(node_label,
                         xy=(n_time_steps + label_offset,
-                            model.delta_[k, -1, node_id]),
+                            delta[-1, node_id]),
                         color=node_colors[i], fontsize=fontsize)
 
             if q_alpha is not None:
@@ -267,13 +272,18 @@ def plot_social_trajectories(
                 ts = np.arange(n_time_steps)
                 for t in range(n_time_steps):
                     se = z_alpha * np.sqrt(model.delta_sigma_[k, t, node_id])
-                    x_upp[t] = model.delta_[k, t, node_id] + se
-                    x_low[t] = model.delta_[k, t, node_id] - se
+                    x_upp[t] = delta[t, node_id] + se
+                    x_low[t] = delta[t, node_id] - se
                 ax.fill_between(
                     ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
-        ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--', color='k')
+        #ax.hlines(0.5, 1, n_time_steps, lw=2, linestyles='--', color='k')
+        if center_trajectories or not hasattr(model, 'init_delta_priors_'):
+            ax.plot(np.zeros(n_time_steps), '--', lw=2, c='k')
+        else:
+            ax.plot(model.init_delta_priors_[k] * np.ones(n_time_steps),
+                    '--', lw=2, c='k')
 
     # remove spines
     ax.spines['right'].set_visible(False)

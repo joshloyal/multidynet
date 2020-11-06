@@ -32,7 +32,7 @@ class ModelParameters(object):
                  delta, delta_sigma, delta_cross_cov,
                  a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq,
                  a_tau_sq_delta, b_tau_sq_delta, c_sigma_sq_delta,
-                 d_sigma_sq_delta, init_delta_priors, reference_nodes):
+                 d_sigma_sq_delta, intercepts, reference_nodes):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
@@ -51,7 +51,7 @@ class ModelParameters(object):
         self.b_tau_sq_delta_ = b_tau_sq_delta
         self.c_sigma_sq_delta_ = c_sigma_sq_delta
         self.d_sigma_sq_delta_ = d_sigma_sq_delta
-        self.init_delta_priors_ = init_delta_priors
+        self.intercepts_ = intercepts
         self.reference_nodes_ = reference_nodes
         self.converged_ = False
         self.logp_ = []
@@ -79,7 +79,7 @@ def initialize_node_effects_single(Y):
     return logreg.coef_[0]
 
 
-def initialize_node_effects(Y, include_reference=False):
+def initialize_node_effects(Y, include_reference=False, reference_nodes=None):
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
@@ -89,15 +89,21 @@ def initialize_node_effects(Y, include_reference=False):
 
     # initial sociality set to half network density on logit scale
     density = calculate_densities(Y)
-    init_delta_priors = 0.5 * np.log(density / (1 - density))
+    intercepts = np.log(density / (1 - density))
 
-    reference_nodes = np.zeros(n_layers, dtype=np.int64)
+    set_reference_nodes = reference_nodes is None
+    if set_reference_nodes:
+        reference_nodes = np.zeros(n_layers, dtype=np.int64)
+
     if include_reference:
         # FIXME: does not support missing values coded as -1
         d_avg = calculate_average_degree(Y)
         for k in range(n_layers):
             # reference node set to node with the median time-averaged degree
-            node_id = np.argmin(np.abs(d_avg[k] - np.median(d_avg[k])))
+            if set_reference_nodes:
+                node_id = np.argmin(np.abs(d_avg[k] - np.median(d_avg[k])))
+            else:
+                node_id = reference_nodes[k]
 
             # shift node effects so that reference is half the
             # empirical density on the logit scale (independent erdos-renyi)
@@ -107,17 +113,18 @@ def initialize_node_effects(Y, include_reference=False):
             #delta[k] = (delta[k].T - delta[k, :, node_id] + density_k).T
 
             delta[k] = (delta[k].T - delta[k, :, node_id]).T
-            delta[k] += init_delta_priors[k]
+            #delta[k] += init_delta_priors[k]
 
             # store reference node
-            reference_nodes[k] = node_id
+            if set_reference_nodes:
+                reference_nodes[k] = node_id
 
-    return delta, reference_nodes, init_delta_priors
+    return delta, reference_nodes, intercepts
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
                           a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-                          include_reference, random_state):
+                          include_reference, reference_nodes, random_state):
     rng = check_random_state(random_state)
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -160,8 +167,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         lmbda_logit_prior = np.log(lambda_odds_prior)
 
     # initialize node-effects based on degree
-    delta, reference_nodes, init_delta_priors = initialize_node_effects(
-        Y, include_reference=include_reference)
+    delta, reference_nodes, intercepts = initialize_node_effects(
+        Y, include_reference=include_reference, reference_nodes=reference_nodes)
     delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
     delta_cross_cov = np.ones((n_layers, n_time_steps - 1, n_nodes))
 
@@ -189,14 +196,15 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
         d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
         c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta,
-        init_delta_priors=init_delta_priors,
+        intercepts=intercepts,
         reference_nodes=reference_nodes)
 
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                   a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-                  include_reference, max_iter, tol, random_state, verbose=True):
+                  include_reference, reference_nodes,
+                  max_iter, tol, random_state, verbose=True):
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
@@ -207,7 +215,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     model = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior,
         a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-        include_reference, random_state)
+        include_reference, reference_nodes, random_state)
 
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_loglik = loglik
@@ -219,7 +227,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             Y, model.omega_, model.X_, model.X_sigma_,
             model.lambda_, model.lambda_sigma_,
             model.delta_, model.delta_sigma_,
-            n_features)
+            model.intercepts_, n_features)
 
         # update latent trajectories
         tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
@@ -231,12 +239,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             update_latent_positions(
                 Y, model.X_, model.X_sigma_, model.X_cross_cov_,
                 model.lambda_, model.lambda_sigma_, model.delta_,
-                model.omega_, tau_sq_prec, sigma_sq_prec)
+                model.intercepts_, model.omega_, tau_sq_prec, sigma_sq_prec)
 
             # update homophily parameters
             update_lambdas(
                 Y, model.X_, model.X_sigma_, model.lambda_,
-                model.lambda_sigma_, model.delta_, model.omega_,
+                model.lambda_sigma_, model.delta_, model.intercepts_,
+                model.omega_,
                 lambda_var_prior, model.lambda_logit_prior_)
 
             # update social trajectories
@@ -250,7 +259,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         update_deltas(
             Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
-            XLX, model.omega_, model.init_delta_priors_,
+            model.intercepts_, XLX, model.omega_,
             tau_sq_prec, sigma_sq_prec,
             model.reference_nodes_, include_reference)
 
@@ -285,7 +294,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     return model
 
 
-def calculate_probabilities(X, lmbda, delta):
+def calculate_probabilities(X, lmbda, delta, intercepts):
     n_layers = delta.shape[0]
     n_time_steps = delta.shape[1]
     n_nodes = delta.shape[2]
@@ -295,7 +304,7 @@ def calculate_probabilities(X, lmbda, delta):
     for k in range(n_layers):
         for t in range(n_time_steps):
             deltakt = delta[k, t].reshape(-1, 1)
-            eta = np.add(deltakt, deltakt.T)
+            eta = intercepts[k] + np.add(deltakt, deltakt.T)
             if X is not None:
                 eta += np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
@@ -372,6 +381,7 @@ class DynamicMultilayerNetworkLSM(object):
     """
     def __init__(self, n_features=2,
                  include_reference=True,
+                 reference_nodes=None,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
                  a=4.0, b=20.0, c=2., d=2.,
@@ -380,6 +390,7 @@ class DynamicMultilayerNetworkLSM(object):
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
         self.include_reference = include_reference
+        self.reference_nodes = reference_nodes
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.a = a
@@ -415,6 +426,12 @@ class DynamicMultilayerNetworkLSM(object):
         self.include_reference_ = (
             False if self.n_features_ == 0 else self.include_reference)
 
+        if self.reference_nodes is not None:
+            # TODO: check dimensions and such
+            self.reference_nodes_ = np.asarray(self.reference_nodes)
+        else:
+            self.reference_nodes_ = self.reference_nodes
+
         random_state = check_random_state(self.random_state)
 
         # run the elbo optimization over different initializations
@@ -425,7 +442,7 @@ class DynamicMultilayerNetworkLSM(object):
                 self.lambda_var_prior,
                 self.a, self.b, self.c, self.d,
                 self.a_delta, self.b_delta, self.c_delta, self.d_delta,
-                self.include_reference_,
+                self.include_reference_, self.reference_nodes_,
                 self.max_iter, self.tol, seed, verbose=verbose)
             for seed in seeds)
 
@@ -446,14 +463,15 @@ class DynamicMultilayerNetworkLSM(object):
 
         # calculate dyad-probabilities
         self.probas_ = calculate_probabilities(
-            self.X_, self.lambda_, self.delta_)
+            self.X_, self.lambda_, self.delta_, self.intercepts_)
 
         # calculate in-sample AUC
         self.auc_ = calculate_auc(Y, self.probas_)
 
         # calculate in-sample log-likelihood
         self.loglik_ = log_likelihood(
-            Y, self.X_, self.lambda_, self.delta_, self.n_features_)
+            Y, self.X_, self.lambda_, self.delta_, self.intercepts_,
+            self.n_features_)
 
         # information criteria
 
@@ -512,8 +530,8 @@ class DynamicMultilayerNetworkLSM(object):
         self.delta_ = model.delta_
         self.delta_sigma_ = model.delta_sigma_
         self.delta_cross_cov_ = model.delta_cross_cov_
-        self.init_delta_priors_ = model.init_delta_priors_
         self.reference_nodes_ = model.reference_nodes_
+        self.intercepts_ = model.intercepts_
 
         self.a_tau_sq_delta_ = model.a_tau_sq_delta_
         self.b_tau_sq_delta_ = model.b_tau_sq_delta_
