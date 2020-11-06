@@ -16,6 +16,7 @@ cpdef double log_likelihood(double[:, :, :, ::1] Y,
                             double[:, :, ::1] X,
                             double[:, ::1] lmbda,
                             double[:, :, ::1] delta,
+                            double[:] intercepts,
                             size_t n_features) nogil:
 
     cdef size_t k, t, i, j, p, q
@@ -30,7 +31,7 @@ cpdef double log_likelihood(double[:, :, :, ::1] Y,
             for i in range(n_nodes):
                 for j in range(i):
                     if Y[k, t, i, j] != -1.:
-                        eta = delta[k, t, i] + delta[k, t, j]
+                        eta = intercepts[k] + delta[k, t, i] + delta[k, t, j]
                         for p in range(n_features):
                             eta += lmbda[k, p] * X[t, i, p] * X[t, j, p]
                         loglik += Y[k, t, i, j] * eta - log(1 + exp(eta))

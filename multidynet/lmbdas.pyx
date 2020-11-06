@@ -17,6 +17,7 @@ def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
                                            double[:, :, ::1] X,
                                            double[:, :, :, ::1] X_sigma,
                                            double[:, :, ::1] delta,
+                                           double[:] intercepts,
                                            double[:, :, :, ::1] omega,
                                            double[:] lmbda,
                                            int p):
@@ -32,7 +33,7 @@ def calculate_natural_parameters_reference(const double[:, :, :, ::1] Y,
                 if Y[0, t, i, j] != -1.0:
                     eta += (
                         (Y[0, t, i, j] - 0.5 - omega[0, t, i, j] * (
-                            delta[0, t, i] + delta[0, t, j])) *
+                            intercepts[0] + delta[0, t, i] + delta[0, t, j])) *
                             X[t, i, p] * X[t, j, p])
 
                     for q in range(n_features):
@@ -49,6 +50,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                                  double[:, :, ::1] X,
                                  double[:, :, :, ::1] X_sigma,
                                  double[:, :, ::1] delta,
+                                 double[:] intercepts,
                                  double[:, :, :, ::1] omega,
                                  double lmbda_var_prior,
                                  int k):
@@ -69,6 +71,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
                         eta1[p] += (
                             (Y[k, t, i, j] - 0.5 -
                                 omega[k, t, i, j] * (
+                                    intercepts[k] +
                                     delta[k, t, i] + delta[k, t, j])) *
                             X[t, i, p] * X[t, j, p])
 
@@ -89,6 +92,7 @@ def update_lambdas(const double[:, :, :, ::1] Y,
                    np.ndarray[double, ndim=2, mode='c'] lmbda,
                    np.ndarray[double, ndim=3, mode='c'] lmbda_sigma,
                    double[:, :, ::1] delta,
+                   double[:] intercepts,
                    double[:, :, :, ::1] omega,
                    double lmbda_var_prior,
                    double lmbda_logit_prior):
@@ -102,14 +106,14 @@ def update_lambdas(const double[:, :, :, ::1] Y,
     # start by updating signs of the reference layer
     for p in range(n_features):
         eta = calculate_natural_parameters_reference(
-            Y, X, X_sigma, delta,  omega, lmbda[0], p)
+            Y, X, X_sigma, delta,  intercepts, omega, lmbda[0], p)
         proba = expit(eta + lmbda_logit_prior)
         lmbda[0, p] = 2 * proba - 1
         lmbda_sigma[0, p, p] = 1 - lmbda[0, p] ** 2
 
     for k in range(1, n_layers):
         eta1, eta2 = calculate_natural_parameters(
-            Y, X, X_sigma, delta, omega, lmbda_var_prior, k)
+            Y, X, X_sigma, delta, intercepts, omega, lmbda_var_prior, k)
 
         lmbda_sigma[k] = np.linalg.pinv(eta2)
         lmbda[k] = np.dot(lmbda_sigma[k], eta1)

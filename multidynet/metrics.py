@@ -140,3 +140,22 @@ def score_latent_space_individual(X_true, X_pred):
             best_perm = perm
 
     return best_rel, best_perm
+
+
+def score_social_trajectories(delta_true, delta_pred):
+    n_layers, n_time_steps, n_nodes = delta_true.shape
+
+    num, dem = 0., 0.
+    indices = np.tril_indices(n_nodes, k=-1)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            dkt = delta_true[k, t].reshape(-1, 1)
+            diff_true = (dkt - dkt.T)[indices]
+
+            dkt = delta_pred[k, t].reshape(-1, 1)
+            diff_pred = (dkt - dkt.T)[indices]
+
+            num += ((diff_true - diff_pred) ** 2).sum()
+            dem += np.sum(diff_true ** 2)
+
+    return num / dem
