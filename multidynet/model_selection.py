@@ -43,43 +43,41 @@ def train_test_split_dyads(Y, test_size=0.1, random_state=None):
     return Y_new, test_indices
 
 
-def train_test_split_nodes(Y, test_size=0.1, random_state=None):
+def train_test_split_nodes(Y, test_nodes=None, test_size=0.1, random_state=None):
+    """
+    Single split of network cross-validation technique of Chen and Li (2018)
+    """
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
     random_state = check_random_state(random_state)
 
-    test_size_type = np.asarray(test_size).dtype.kind
-    if test_size_type == 'f':
-        n_test = ceil(test_size * n_nodes)
-    else:
-        n_test = int(test_size)
+    if test_nodes is None:
+        test_size_type = np.asarray(test_size).dtype.kind
+        if test_size_type == 'f':
+            n_test = ceil(test_size * n_nodes)
+        else:
+            n_test = int(test_size)
 
-    # for each layer randomly remove n_test nodes
-    test_nodes = np.zeros((n_layers, n_test), dtype=np.int64)
-    for k in range(n_layers):
-        test_nodes[k] = random_state.choice(
+        # randomly sample n_test nodes
+        test_nodes = random_state.choice(
             np.arange(n_nodes), size=n_test, replace=False)
-    n_indices = int(n_test * n_nodes - 0.5 * n_test * (n_test + 1))
+    else:
+        n_test = test_nodes.shape[0]
+
+    test_mask = (test_nodes[:, np.newaxis], test_nodes[np.newaxis, :])
+
+    # store test dyads
+    n_indices = int(0.5 * n_test * (n_test - 1))
     test_indices = np.zeros((n_layers, n_time_steps, n_indices), dtype=np.int64)
 
     # apply the mask
     Y_new = np.zeros_like(Y)
+    tril_indices = np.tril_indices_from(Y_new[0, 0], k=-1)
     for t in range(n_time_steps):
-
-        # re-sample nodes for second half of data
-        #if t == int(n_time_steps / 2):
-        #    for k in range(n_layers):
-        #        test_nodes[k] = random_state.choice(
-        #            np.arange(n_nodes), size=n_test, replace=False)
-
         for k in range(n_layers):
-            tril_indices = np.tril_indices_from(Y[k, t], k=-1)
             Y_new[k, t] = Y[k, t].copy()
-            for i in test_nodes[k]:
-                Y_new[k, t, :, i] = -1
-                Y_new[k, t, i, :] = -1
-            Y_new[k, t][np.diag_indices_from(Y_new[k, t])] = 0.
-
+            Y_new[k, t][test_mask] = -1
+            Y_new[k, t][np.diag_indices(n_nodes)] = 0
             test_indices[k, t] = np.where(Y_new[k, t][tril_indices] == -1)[0]
 
     return Y_new, test_indices
@@ -97,24 +95,9 @@ def train_test_split(Y, test_size=0.1, test_type='dyads', random_state=None):
                          "'nodes'".format(test_type))
 
 
-def mask_nodes(Y, node_list):
-    n_time_steps, n_nodes, _ = Y.shape
+def network_cross_validation(Y, n_folds=4, random_state=None):
+    rng = check_random_state(random_state)
 
-    # initialize arrays holding masked dyads
-    n_mask = node_list.shape[0]
-    n_indices = int(n_mask * n_nodes - 0.5 * n_mask * (n_mask + 1))
-    masked_indices = np.zeros((n_time_steps, n_indices), dtype=np.int64)
-
-    # apply the mask
-    Y_new = np.zeros_like(Y)
-    for t in range(n_time_steps):
-        tril_indices = np.tril_indices_from(Y[t], k=-1)
-        Y_new[t] = Y[t].copy()
-        for i in node_list:
-            Y_new[t, :, i] = -1
-            Y_new[t, i, :] = -1
-        Y_new[t][np.diag_indices_from(Y_new[t])] = 0.
-
-        masked_indices[t] = np.where(Y_new[t][tril_indices] == -1)[0]
-
-    return Y_new, masked_indices
+    kfolds = KFold(n_splits=n_folds, shuffle=True, random_state=rng)
+    for _, test_nodes in kfolds.split(np.arange(Y.shape[2])):
+        yield train_test_split_nodes(Y, test_nodes=test_nodes, random_state=rng)

@@ -434,13 +434,13 @@ class DynamicMultilayerNetworkLSM(object):
         self.bic_ = -2 * self.loglik_ + self.p_bic_
 
         # DIC (approximate with posterior samples)
-        self.dic_, self.p_dic_ = calculate_dic(
-            self, random_state=random_state)
+        #self.dic_, self.p_dic_ = calculate_dic(
+        #    self, random_state=random_state)
 
-        # WAIC (only supported for no missing edges)
-        if not np.any(Y == -1):
-            self.waic_, self.p_waic_ = calculate_waic(
-                self, Y, random_state=random_state)
+        ## WAIC (only supported for no missing edges)
+        #if not np.any(Y == -1):
+        #    self.waic_, self.p_waic_ = calculate_waic(
+        #        self, Y, random_state=random_state)
 
         return self
 
