@@ -253,15 +253,18 @@ def calculate_probabilities(X, lmbda, delta):
 
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    dist = np.zeros(
+        (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             deltakt = delta[k, t].reshape(-1, 1)
             eta = np.add(deltakt, deltakt.T)
             if X is not None:
-                eta += np.dot(X[t] * lmbda[k], X[t].T)
+                dist[k, t] = np.dot(X[t] * lmbda[k], X[t].T)
+                eta += dist[k, t]
             probas[k, t] = expit(eta)
 
-    return probas
+    return probas, dist
 
 
 class DynamicMultilayerNetworkLSM(object):
@@ -401,7 +404,7 @@ class DynamicMultilayerNetworkLSM(object):
         self._set_parameters(best_model)
 
         # calculate dyad-probabilities
-        self.probas_ = calculate_probabilities(
+        self.probas_, self.dist_ = calculate_probabilities(
             self.X_, self.lambda_, self.delta_)
 
         # calculate in-sample AUC

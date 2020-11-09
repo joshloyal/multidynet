@@ -20,7 +20,7 @@ from dynetlsm.plots import get_colors
 
 __all__ = ['plot_network', 'make_network_animation',
            'plot_sociability', 'plot_lambda', 'plot_node_trajectories',
-           'plot_pairwise_probabilities']
+           'plot_pairwise_distances', 'plot_pairwise_probabilities']
 
 
 def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
@@ -61,7 +61,7 @@ def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
     return ellipses
 
 
-def plot_network(Y, X, X_sigma=None,
+def plot_network(Y, X, X_sigma=None, delta=None,
                  z=None, tau_sq=None, normalize=True, figsize=(8, 6),
                  node_color='orangered', color_distance=False,
                  alpha=1.0, contour_alpha=0.25,
@@ -106,13 +106,18 @@ def plot_network(Y, X, X_sigma=None,
 
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
                      node_color=node_color,
-                     node_size=size,
+                     node_size=size if delta is None else 0,
                      alpha=alpha,
                      cmap=cmap,
                      labels=labels,
                      font_size=font_size,
                      with_labels=with_labels,
                      ax=ax)
+
+    if delta is not None:
+        sizes = (delta - delta.min()) / (delta.max() - delta.min())
+        ax.scatter(X[:, 0], X[:, 1], s=size * sizes,
+                   c='gray')
 
     if X_sigma is not None:
         ax.collections[0].set_edgecolor(None)
@@ -339,6 +344,77 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
                          fontsize=fontsize)
 
     plt.subplots_adjust(right=0.7)
+
+    return fig, ax
+
+
+def sample_distances(model, k, t, i, j, n_reps=1000, random_state=123):
+    rng = check_random_state(random_state)
+
+    Xi = rng.multivariate_normal(model.X_[t, i], model.X_sigma_[t, i],
+                                 size=n_reps)
+    Xj = rng.multivariate_normal(model.X_[t, j], model.X_sigma_[t, j],
+                                 size=n_reps)
+
+    if k == 0:
+        lmbdak = np.zeros((n_reps, model.lambda_.shape[1]))
+        for p in range(model.lambda_.shape[1]):
+            lmbdak[:, p] = (
+                2 * rng.binomial(1, model.lambda_proba_[p], size=n_reps) - 1)
+    else:
+        lmbdak = rng.multivariate_normal(
+            model.lambda_[k], model.lambda_sigma_[k], size=n_reps)
+
+    return np.sum(lmbdak * Xi * Xj, axis=1)
+
+
+def plot_pairwise_distances(model, node_i, node_j,
+                            node_labels=None,
+                            layer_labels=None, q_alpha=0.05, n_reps=1000,
+                            random_state=123, alpha=0.2, linestyle='--',
+                            figsize=(10, 8), ax=None):
+    if ax is not None:
+        fig = None
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+
+
+    if node_labels is None:
+        node_labels = [i for i in range(model.X_.shape[1])]
+    node_labels = np.asarray(node_labels)
+
+    n_layers, n_time_steps, n_nodes, _ = model.dist_.shape
+    ts = np.arange(n_time_steps)
+    i = np.where(node_labels == node_i)[0].item()
+    j = np.where(node_labels == node_j)[0].item()
+    for k in range(n_layers):
+        if layer_labels is None:
+            label =  'k = {}'.format(k)
+        else:
+            label = layer_labels[k]
+
+        if q_alpha is None:
+            ax.plot(ts, model.dist_[k, :, i, j], linestyle,
+                    label=label)
+        else:
+            dist_mean = np.zeros(n_time_steps)
+            dist_low = np.zeros(n_time_steps)
+            dist_upp = np.zeros(n_time_steps)
+            for t in range(n_time_steps):
+                dist = sample_distances(
+                    model, k, t, i, j, n_reps=n_reps, random_state=random_state)
+                dist_mean[t] = dist.mean()
+                dist_low[t] = np.quantile(dist, q=q_alpha / 2.)
+                dist_upp[t] = np.quantile(dist, q=1 - q_alpha / 2.)
+
+            ax.plot(ts, dist_mean, linestyle, label=label)
+            ax.fill_between(ts, dist_low, dist_upp, alpha=alpha)
+        break
+
+    # accomodate legends and title
+    ax.legend(bbox_to_anchor=(1.04, 1), loc='upper left')
+    ax.set_xlabel('t')
+    ax.set_ylabel('Distances ({} - {})'.format(node_i, node_j))
 
     return fig, ax
 
