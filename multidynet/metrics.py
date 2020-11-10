@@ -2,6 +2,7 @@ import itertools
 
 import numpy as np
 
+from scipy.special import logit
 from sklearn.metrics import roc_auc_score
 
 
@@ -48,6 +49,40 @@ def calculate_auc(Y_true, Y_pred, test_indices=None):
             y_pred.extend(y_pred_vec[subset])
 
     return roc_auc_score(y_true, y_pred)
+
+
+def calculate_eta(X, lmbda, delta):
+    n_layers = delta.shape[0]
+    n_time_steps = delta.shape[1]
+    n_nodes = delta.shape[2]
+
+    eta = np.zeros(
+        (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            deltakt = delta[k, t].reshape(-1, 1)
+            eta_kt = np.add(deltakt, deltakt.T)
+            if X is not None:
+                eta_kt += np.dot(X[t] * lmbda[k], X[t].T)
+            eta[k, t] = eta_kt
+
+    return eta
+
+
+def calculate_lpp(Y, model, test_indices):
+    n_layers, n_time_steps, _, _ = Y.shape
+    eta = calculate_eta(model.X_, model.lambda_, model.delta_)
+
+    lpp = 0.
+    indices = np.tril_indices_from(Y[0, 0], k=-1)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+           y_vec = Y[k, t][indices][test_indices[k, t]]
+           eta_vec = eta[k, t][indices][test_indices[k, t]]
+           lpp += (y_vec * eta_vec).sum()
+           lpp -= np.logaddexp(np.ones(eta_vec.shape[0]), eta_vec).sum()
+
+    return lpp
 
 
 def score_latent_space(X_true, X_pred):
