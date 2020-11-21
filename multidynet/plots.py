@@ -231,10 +231,11 @@ def plot_static_sociability(model, k=0, node_labels=None, layer_label=None,
 
 def plot_social_trajectories(
                      model, k=0, q_alpha=0.05, node_list=None, node_colors=None,
-                     node_labels=None, layer_label=None, plot_hline=True,
-                     xlabel='Time', alpha=0.15, fill_alpha=0.2, line_width=3,
-                     ax=None, figsize=(10, 6), label_offset=1, fontsize=12,
-                     color_code=False):
+                     node_labels=None, layer_label=None, ref_value=0,
+                     ref_label=None,
+                     plot_hline=True, xlabel='Time', alpha=0.15, fill_alpha=0.2,
+                     line_width=3, ax=None, figsize=(10, 6), label_offset=1,
+                     fontsize=12, color_code=False):
 
     n_layers, n_time_steps, n_nodes = model.delta_.shape
 
@@ -278,7 +279,12 @@ def plot_social_trajectories(
                     ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
-        ax.hlines(0, 1, n_time_steps, lw=2, linestyles='--', color='k')
+        ax.hlines(ref_value, 0, n_time_steps - 1, lw=2, linestyles='--', color='k')
+
+        if ref_label:
+            ax.annotate(ref_label,
+                        xy=(n_time_steps + label_offset, ref_value),
+                        color='k', fontsize=fontsize)
 
     # remove spines
     ax.spines['right'].set_visible(False)
@@ -550,6 +556,127 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
     ax.set_ylabel('Link Probability ({} - {})'.format(node_i, node_j))
 
     return fig, ax
+
+def plot_homophily_matrix(model, q_alpha=0.05,
+                           layer_labels=None, height=0.5, hspace=1.,
+                           fontsize=12, figsize=(12, 6)):
+    n_layers, n_features = model.lambda_.shape
+
+    if layer_labels is None:
+        layer_labels = ['k = {}'.format(k + 1) for k in range(n_layers)]
+
+    fig, axes = plt.subplots(n_layers, 1, figsize=figsize, sharex=True)
+
+    z_alpha = norm.ppf(1 - q_alpha / 2.)
+    for p in range(n_features):
+        xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
+
+        for k in range(n_layers):
+            colors = 'red' if model.lambda_[k, p] > 0 else 'blue'
+            axes[k].hlines(k + hspace * p, 0, model.lambda_[k, p], lw=1,
+                           color=colors, linestyles='--')
+            axes[k].errorbar(model.lambda_[k, p], k + hspace * p,
+                             fmt='o',
+                             xerr=xerr[k], ecolor='k', capsize=5,
+                             color='k', markersize=9, markeredgecolor='w')
+
+        # add text
+        for k in range(n_layers):
+            align = 'right' if model.lambda_[k, p]  >= 0 else 'left'
+
+            lmbda = model.lambda_[k, p]
+            if k == 0:
+                txt = '{}    (p = {})'.format(lmbda, p+1)
+            else:
+                txt = '{:.3f} ({:.3f}, {:.3f})'.format(
+                    lmbda, lmbda - xerr[k], lmbda + xerr[k])
+            axes[k].text(lmbda, k + hspace * p - 0.1,
+                         txt, horizontalalignment=align)
+
+    for k in range(n_layers):
+        axes[k].set_yticks([k + hspace / n_features])
+        axes[k].set_yticklabels([layer_labels[k]], fontsize=fontsize)
+        axes[k].invert_yaxis()
+
+        if k != (n_layers - 1):
+            axes[k].spines['bottom'].set_visible(False)
+            axes[k].tick_params(bottom=False)
+
+
+    axes[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
+                        fontsize=fontsize)
+
+    x_max = max([ax.get_xlim()[1] for ax in axes.flat])
+    for k in range(n_layers):
+        if np.all(model.lambda_ >= 0):
+            axes[k].set_xlim(0, axes[k].get_xlim()[1])
+        else:
+            axes[k].vlines(0, k, k + hspace * (n_features - 1),
+                           linestyles='dotted', color='k')
+        sns.despine(ax=axes[k], bottom=True)
+
+
+    sns.set_style('white')
+    plt.subplots_adjust(hspace=0.5)
+
+    return fig, axes
+
+#def plot_homophily_matrix(model, q_alpha=0.05, colors=None,
+#                          layer_labels=None, height=0.5,
+#                          fontsize=12, figsize=(12, 6)):
+#    n_layers, n_features = model.lambda_.shape
+#
+#    if layer_labels is None:
+#        layer_labels = ['k = {}'.format(k + 1) for k in range(n_layers)]
+#
+#    fig, ax = plt.subplots(figsize=figsize)
+#
+#    if colors is None:
+#        colors = get_colors(np.arange(n_layers))
+#
+#    z_alpha = norm.ppf(1 - q_alpha / 2.)
+#    for p in range(n_features):
+#        xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
+#
+#        #colors = ['red' if model.lambda_[k, p] > 0 else 'blue' for
+#        #          k in range(n_layers)]
+#        ax.hlines(np.arange(n_layers) + 0.5 * p, 0, model.lambda_[:, p], lw=1,
+#                  color=colors, linestyles='--')
+#        ax.errorbar(model.lambda_[:, p], np.arange(n_layers) + 0.5 * p,
+#                    fmt='o',
+#                    xerr=xerr, ecolor='k', capsize=5,
+#                    color='k', markersize=9, markeredgecolor='w')
+#
+#        # add text
+#        for k in range(n_layers):
+#            align = 'right' if model.lambda_[k, p]  >= 0 else 'left'
+#
+#            lmbda = model.lambda_[k, p]
+#            if k == 0:
+#                txt = '{}'.format(lmbda)
+#            else:
+#                txt = '{:.3f} ({:.3f}, {:.3f})'.format(
+#                    lmbda, lmbda - xerr[k], lmbda + xerr[k])
+#            ax.text(lmbda, k + 0.5 * p - 0.1, txt, horizontalalignment=align)
+#
+#    ax.set_yticks(np.arange(n_layers) + 0.25)
+#    ax.set_yticklabels(layer_labels, fontsize=fontsize)
+#    ax.invert_yaxis()
+#    #ax.set_title('p = {}'.format(p + 1), fontsize=fontsize)
+#
+#    ax.set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
+#                  fontsize=fontsize)
+#
+#    #x_max = max([ax.get_xlim()[1] for ax in axes.flat])
+#    if np.all(model.lambda_ >= 0):
+#        ax.set_xlim(0, ax.get_xlim()[1])
+#    else:
+#        ax.vlines(0, 0, n_layers - 0.5 * (n_features - 1), linestyles='dotted', color='k')
+#    sns.despine(ax=ax, bottom=True)
+#
+#    sns.set_style('white')
+#
+#    return fig, ax
 
 
 def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,

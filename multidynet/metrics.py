@@ -85,44 +85,6 @@ def calculate_lpp(Y, model, test_indices):
     return lpp
 
 
-def score_latent_space(X_true, X_pred):
-    """The estimated latent space is still invariant to column permutations and
-    sign flips. To fix these we do an exhaustive search over all permutations
-    and sign flips and return the value with the lowest MSE."""
-    n_features = X_true.shape[2]
-    best_mse = np.inf
-    best_perm = None
-    for perm in itertools.permutations(np.arange(n_features)):
-        X = X_pred[..., perm]
-
-        # no flip
-        mse = np.mean((X_true - X_pred) ** 2)
-        if mse < best_mse:
-            best_mse = mse
-            best_perm = perm
-
-        # loops through single feature flips
-        for p in range(n_features):
-            Xp = X.copy()
-            Xp[..., p] = -X[..., p]
-            mse = np.mean((X_true - Xp) ** 2)
-            if mse < best_mse:
-                best_mse = mse
-                best_perm = perm
-
-        # loop through all feature combinations
-        for k in range(2, n_features + 1):
-            for combo in itertools.combinations(range(n_features), k):
-                Xp = X.copy()
-                Xp[..., combo] = -X[..., combo]
-                mse = np.mean((X_true - Xp) ** 2)
-                if mse < best_mse:
-                    best_mse = mse
-                    best_perm = perm
-
-    return best_mse, best_perm
-
-
 def score_latent_space_t(X_true, X_pred, perm):
     """The estimated latent space is still invariant to column permutations and
     sign flips. To fix these we do an exhaustive search over all permutations
@@ -154,7 +116,7 @@ def score_latent_space_t(X_true, X_pred, perm):
     return best_rel
 
 
-def score_latent_space_individual(X_true, X_pred):
+def score_latent_space_single_perml(X_true, X_pred):
     """The estimated latent space is still invariant to column permutations and
     sign flips. To fix these we do an exhaustive search over all permutations
     and sign flips and return the value with the lowest MSE.
@@ -175,3 +137,50 @@ def score_latent_space_individual(X_true, X_pred):
             best_perm = perm
 
     return best_rel, best_perm
+
+
+def score_latent_space(X_true, X_pred):
+    n_time_steps, _, n_features = X_true.shape
+    rel = 0
+    for t in range(X_true.shape[0]):
+        best_rel = np.inf
+        for perm in itertools.permutations(np.arange(n_features)):
+            rel_t = score_latent_space_t(X_true[t], X_pred[t], perm)
+            if rel_t < best_rel:
+                best_rel = rel_t
+        rel += best_rel
+    rel /= n_time_steps
+
+    return rel
+
+
+def score_homophily_matrix(lambda_true, lambda_pred):
+    n_features = lambda_true.shape[1]
+
+    best_rel = np.inf
+    for perm in itertools.permutations(np.arange(n_features)):
+        rel = np.sum((lambda_true - lambda_pred[:, perm]) ** 2)
+        rel /= np.sum(lambda_true ** 2)
+        if rel < best_rel:
+            best_rel = rel
+
+    return best_rel
+
+
+def score_social_trajectories(delta_true, delta_pred):
+    n_layers, n_time_steps, n_nodes = delta_true.shape
+    num, dem = 0., 0.
+
+    indices = np.tril_indices(n_nodes, k=-1)
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            d_hat = delta_pred[k, t].reshape(-1, 1)
+            D_hat = d_hat - d_hat.T
+
+            d_true = delta_true[k, t].reshape(-1, 1)
+            D_true = d_true - d_true.T
+
+            num += np.sum((D_true[indices] - D_hat[indices]) ** 2)
+            dem += np.sum(D_true[indices] ** 2)
+
+    return num / dem
