@@ -96,9 +96,11 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
         X[0] = np.sqrt(tau_sq) * rng.randn(n_nodes, n_features)
+        X[0] -= np.mean(X[0], axis=0)
         for t in range(1, n_time_steps):
             X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
-        X -= np.mean(X, axis=(0, 1))
+            X[t] -= np.mean(X[t], axis=0)
+        #X -= np.mean(X, axis=(0, 1))
 
         # sample assortativity parameters from a U(-2, 2)
         lmbda = np.zeros((n_layers, n_features))

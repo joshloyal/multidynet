@@ -62,7 +62,7 @@ def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
 
 
 def plot_network(Y, X, X_sigma=None, delta=None,
-                 z=None, tau_sq=None, normalize=True, figsize=(8, 6),
+                 z=None, tau_sq=None, normalize=False, figsize=(8, 6),
                  node_color='orangered', color_distance=False,
                  alpha=1.0, contour_alpha=0.25,
                  size=300, edge_width=0.25, node_labels=None,
@@ -250,7 +250,10 @@ def plot_social_trajectories(
 
 
     for i in range(n_nodes):
-        ax.plot(model.delta_[k, :, i].T, 'k-', alpha=alpha)
+        if model.X_ is None:
+            ax.plot(model.delta_[k, :, i].T, 'k-', alpha=alpha)
+        else:
+            ax.plot(model.gamma_[k, :, i].T, 'k-', alpha=alpha)
 
     if node_list is not None:
         node_list = np.asarray(node_list)
@@ -259,14 +262,18 @@ def plot_social_trajectories(
 
         for i, node_label in enumerate(node_list):
             node_id = np.where(node_labels == node_label)[0].item()
-            ax.plot(model.delta_[k, :, node_id].T, '-',
-                    lw=line_width, c=node_colors[i])
+            if model.X_ is None:
+                ax.plot(model.delta_[k, :, node_id].T, '-',
+                        lw=line_width, c=node_colors[i])
+            else:
+                ax.plot(model.gamma_[k, :, node_id].T, '-',
+                        lw=line_width, c=node_colors[i])
             ax.annotate(node_label,
                         xy=(n_time_steps + label_offset,
                             model.delta_[k, -1, node_id]),
                         color=node_colors[i], fontsize=fontsize)
 
-            if q_alpha is not None:
+            if q_alpha is not None and model.X_ is None:
                 x_upp = np.zeros(n_time_steps)
                 x_low = np.zeros(n_time_steps)
                 z_alpha = norm.ppf(1 - q_alpha / 2.)
@@ -277,9 +284,17 @@ def plot_social_trajectories(
                     x_low[t] = model.delta_[k, t, node_id] - se
                 ax.fill_between(
                     ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
+            elif q_alpha is not None:
+                gamma_ci = np.quantile(
+                    model.gammas_, [q_alpha/2., 1 - q_alpha/2.], axis=0)
+                ax.fill_between(
+                    np.arange(n_time_steps), gamma_ci[0, k, :, node_id],
+                    gamma_ci[1, k, :, node_id],
+                    alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
-        ax.hlines(ref_value, 0, n_time_steps - 1, lw=2, linestyles='--', color='k')
+        ax.hlines(
+            ref_value, 0, n_time_steps - 1, lw=2, linestyles='--', color='k')
 
         if ref_label:
             ax.annotate(ref_label,
@@ -323,7 +338,7 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
     if node_colors is None:
         node_colors = get_colors(np.arange(len(node_list)))
 
-    n_time_steps, n_nodes, n_features = model.X_.shape
+    n_time_steps, n_nodes, n_features = model.Z_.shape
     z_alpha = norm.ppf(1 - q_alpha / 2.)
     ts = np.arange(n_time_steps)
     for i, node_label in enumerate(node_list):
@@ -331,12 +346,12 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
         x_upp = np.zeros(n_time_steps)
         x_low = np.zeros(n_time_steps)
         for p in range(n_features):
-            ax[p].plot(ts, model.X_[:, node_id, p], linestyle,
+            ax[p].plot(ts, model.Z_[:, node_id, p], linestyle,
                        label=node_labels[node_id], c=node_colors[i])
             for t in range(n_time_steps):
-                se = z_alpha * np.sqrt(model.X_sigma_[t, node_id, p, p])
-                x_upp[t] = model.X_[t, node_id, p] + se
-                x_low[t] = model.X_[t, node_id, p] - se
+                se = z_alpha * np.sqrt(model.Z_sigma_[t, node_id, p, p])
+                x_upp[t] = model.Z_[t, node_id, p] + se
+                x_low[t] = model.Z_[t, node_id, p] - se
             ax[p].fill_between(
                 ts, x_low, x_upp, alpha=alpha, color=node_colors[i])
 

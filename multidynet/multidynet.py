@@ -70,7 +70,9 @@ def sample_socialities(model, size=500, random_state=None):
             ZLM = np.einsum('stp,stp->st', ZL, X_bar)
             gammas[:, k, :, i] = deltas[:, k, :, i] + ZLM + 0.5 * MLM[k]
 
-    return np.mean(gammas, axis=0), np.quantile(gammas, [0.025, 0.975], axis=0)
+    gamma_mean = np.mean(gammas, axis=0)
+    gamma_ci = np.quantile(gammas, [0.025, 0.975], axis=0)
+    return gammas, gamma_mean, gamma_ci
 
 
 def initialize_node_effects_single(Y):
@@ -479,15 +481,22 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_cross_cov_ = model.X_cross_cov_
 
         # transform to identifiable parameterization
-        self.Z_ = self.X_ - np.expand_dims(np.mean(self.X_, axis=1), axis=1)
+        if self.X_ is not None:
+            self.Z_ = (self.X_ -
+                np.expand_dims(np.mean(self.X_, axis=1), axis=1))
 
-        n_time_steps, n_nodes, n_features = self.X_.shape
-        self.Z_sigma_ = np.zeros(
-            (n_time_steps, n_nodes, n_features, n_features))
-        for i in range(n_nodes):
-            self.Z_sigma_[:, i] = ((1 - 1./n_nodes) ** 2) * self.X_sigma_[:, i]
-            self.Z_sigma_[:, i] -= ((1./n_nodes) ** 2) * np.sum(
-                self.X_sigma_[:, [j for j in range(n_nodes) if j != i]], axis=1)
+            n_time_steps, n_nodes, n_features = self.X_.shape
+            self.Z_sigma_ = np.zeros(
+                (n_time_steps, n_nodes, n_features, n_features))
+            for i in range(n_nodes):
+                self.Z_sigma_[:, i] = (
+                    ((1 - 1./n_nodes) ** 2) * self.X_sigma_[:, i])
+                self.Z_sigma_[:, i] -= ((1./n_nodes) ** 2) * np.sum(
+                    self.X_sigma_[:, [j for j in range(n_nodes) if j != i]],
+                    axis=1)
+        else:
+            self.Z_ = None
+            self.Z_sigma_ = None
 
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
@@ -510,8 +519,13 @@ class DynamicMultilayerNetworkLSM(object):
         self.delta_cross_cov_ = model.delta_cross_cov_
 
         # transform to identifiable parameters (requires sampling)
-        self.gamma_, self.gamma_CI_ = sample_socialities(
-            self, size=500, random_state=self.random_state)
+        if self.X_ is not None:
+            self.gammas_, self.gamma_, self.gamma_ci_ = sample_socialities(
+                self, size=2500, random_state=self.random_state)
+        else:
+            self.gammas_ = None
+            self.gamma_ = None
+            self.gamma_ci_ = None
 
         self.a_tau_sq_delta_ = model.a_tau_sq_delta_
         self.b_tau_sq_delta_ = model.b_tau_sq_delta_
@@ -533,6 +547,9 @@ class DynamicMultilayerNetworkLSM(object):
         if self.X_ is not None:
             Xs = np.zeros((size, n_time_steps, n_nodes, self.n_features))
             lambdas = np.zeros((size, n_layers, self.n_features))
+        else:
+            Xs = None
+            lambdas = None
 
         for i in range(n_nodes):
             if self.X_ is not None:
@@ -555,9 +572,8 @@ class DynamicMultilayerNetworkLSM(object):
                     mean=self.lambda_[k], cov=self.lambda_sigma_[k],
                     size=size)
 
-        if self.X_ is not None:
-            return deltas, Xs, lambdas
-        return deltas
+        return deltas, Xs, lambdas
+
 
 def fit_layer(Y, k, **est_kwargs):
     Y_layer = np.expand_dims(Y[k], axis=0)
