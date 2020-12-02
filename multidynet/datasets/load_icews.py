@@ -8,7 +8,7 @@ from os.path import dirname, join
 __all__ = ['load_icews']
 
 
-def load_icews(dataset=['small','large']):
+def load_icews(dataset='small'):
     module_path = dirname(__file__)
     file_path = join(module_path, 'raw_data')
 
