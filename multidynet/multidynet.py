@@ -206,13 +206,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             n_features)
 
         # update latent trajectories
-        if n_iter == 0:
-            # initialize at large values to allow for exploration
-            tau_sq_prec = 10
-            sigma_sq_prec = 1
-        else:
-            tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
-            sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
+        tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
+        sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
 
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
@@ -234,12 +229,8 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                     XLX[k, t] = np.dot(
                         model.X_[t] * model.lambda_[k], model.X_[t].T)
 
-        if n_iter == 0:
-            tau_sq_prec = 10.
-            sigma_sq_prec = 1
-        else:
-            tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
-            sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
+        tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
+        sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
 
         update_deltas(
             Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
