@@ -87,6 +87,7 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
 
 def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
                                n_features=2, tau_sq=4.0, sigma_sq=0.05,
+                               include_delta=True,
                                sigma_sq_delta=0.1, random_state=42):
     rng = check_random_state(random_state)
 
@@ -114,11 +115,12 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
 
     # sample degree effects from a U(-4, 4)
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
-    for k in range(n_layers):
-        delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
-        for t in range(1, n_time_steps):
-            delta[k, t] = (
-                delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
+    if include_delta:
+        for k in range(n_layers):
+            delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
+            for t in range(1, n_time_steps):
+                delta[k, t] = (
+                    delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
 
     # construct the network
     Y, probas = multilayer_network_from_dynamic_latent_space(

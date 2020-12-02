@@ -357,8 +357,11 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
-                 a=4.0, b=20.0, c=2., d=2.,
-                 a_delta=6.0, b_delta=4.0, c_delta=20., d_delta=2.0,
+                 #a=4.0, b=20.0, c=2., d=2.,
+                 #a_delta=6.0, b_delta=4.0, c_delta=20., d_delta=2.0,
+                 # a = 2 (2 + eps), b = 2 (1 + eps) * E[tau_sq], eps = 0.05
+                 a=4.1, b=2.1 * 10, c=2., d=2.,
+                 a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
