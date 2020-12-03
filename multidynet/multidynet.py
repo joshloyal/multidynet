@@ -137,10 +137,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # initialize to prior means
         lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
-        lmbda[0] = (
-            2 * (lambda_odds_prior / (1. + lambda_odds_prior)) - 1)
         lmbda_sigma = lambda_var_prior * np.ones(
             (n_layers, n_features, n_features))
+
+        # reference layer lambda initialized to one
+        lmbda[0] = 1.
         lmbda_sigma[0] = (
             (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
         lmbda_logit_prior = np.log(lambda_odds_prior)
