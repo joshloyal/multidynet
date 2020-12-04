@@ -23,13 +23,17 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
     Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    dists = np.zeros(
+        (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             # sample the adjacency matrix
             deltak = delta[k, t].reshape(-1, 1)
             eta = np.add(deltak, deltak.T)
             if X is not None:
-                eta += np.dot(X[t] * lmbda[k], X[t].T)
+                dists[k, t] = np.dot(X[t] * lmbda[k], X[t].T)
+                eta += dists[k, t]
+
             probas[k, t] = expit(eta)
 
             Y[k, t] = rng.binomial(1, probas[k, t]).astype(np.int)
@@ -38,7 +42,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
             Y[k, t] = np.tril(Y[k, t], k=-1)
             Y[k, t] += Y[k, t].T
 
-    return Y, probas
+    return Y, probas, dists
 
 
 def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
@@ -79,10 +83,10 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
             delta[k, t] = delta[k, t-1] + np.sqrt(0.1) * rng.randn(n_nodes)
 
     # construct the network
-    Y, probas = multilayer_network_from_dynamic_latent_space(
+    Y, probas, dists = multilayer_network_from_dynamic_latent_space(
         X, lmbda, delta, random_state=rng)
 
-    return Y, X, lmbda, delta, probas
+    return Y, X, lmbda, delta, probas, dists
 
 
 def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
@@ -123,10 +127,10 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
                     delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
 
     # construct the network
-    Y, probas = multilayer_network_from_dynamic_latent_space(
+    Y, probas, dists = multilayer_network_from_dynamic_latent_space(
         X, lmbda, delta, random_state=rng)
 
-    return Y, X, lmbda, delta, probas
+    return Y, X, lmbda, delta, probas, dists
 
 
 def network_from_dynamic_latent_space(X, delta, random_state=None):
