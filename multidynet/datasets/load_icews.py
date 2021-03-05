@@ -8,7 +8,7 @@ from os.path import dirname, join
 __all__ = ['load_icews']
 
 
-def load_icews(dataset='small'):
+def load_icews(dataset='small', country_names='full'):
     module_path = dirname(__file__)
     file_path = join(module_path, 'raw_data')
 
@@ -16,9 +16,14 @@ def load_icews(dataset='small'):
     file_name = join(file_path, dir_name, 'numpy_data', 'icews_networks.gz')
     Y = joblib.load(open(file_name, 'rb'))
 
-    countries = np.loadtxt(
-        join(file_path, dir_name, 'numpy_data', 'icews_countries.txt'),
-        delimiter='\n', dtype=np.unicode)
+    if country_names == 'full':
+        countries = np.loadtxt(
+            join(file_path, dir_name, 'numpy_data', 'icews_countries.txt'),
+            delimiter='\n', dtype=np.unicode)
+    else:
+        countries = np.loadtxt(
+            join(file_path, dir_name, 'numpy_data', 'icews_countries_iso.txt'),
+            delimiter='\n', dtype=np.unicode)
 
 
     layer_labels = ['Verbal Cooperation', 'Material Cooperation',
