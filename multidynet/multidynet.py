@@ -20,7 +20,7 @@ from .variances import update_tau_sq, update_sigma_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
 from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
-
+from .sample_lds import sample_gssm
 
 __all__ = ['DynamicMultilayerNetworkLSM']
 
@@ -53,6 +53,26 @@ class ModelParameters(object):
         self.d_sigma_sq_delta_ = d_sigma_sq_delta
         self.converged_ = False
         self.logp_ = []
+
+
+def sample_socialities(model, size=500, random_state=None):
+    deltas, Xs, lambdas = model.sample(size=size, random_state=random_state)
+
+    X_bar = np.mean(Xs, axis=2)
+    Xs -= np.expand_dims(X_bar, axis=2)
+
+    _, n_layers, n_time_steps, n_nodes =  deltas.shape
+    gammas = np.zeros((size, n_layers, n_time_steps, n_nodes))
+    MLM = np.einsum('stp,skp->kst', X_bar ** 2, lambdas)
+    for k in range(n_layers):
+        for i in range(n_nodes):
+            ZL = Xs[:, :, i] * np.expand_dims(lambdas[:, k, :], axis=1)
+            ZLM = np.einsum('stp,stp->st', ZL, X_bar)
+            gammas[:, k, :, i] = deltas[:, k, :, i] + ZLM + 0.5 * MLM[k]
+
+    gamma_mean = np.mean(gammas, axis=0)
+    gamma_ci = np.quantile(gammas, [0.025, 0.975], axis=0)
+    return gammas, gamma_mean, gamma_ci
 
 
 def initialize_node_effects_single(Y):
@@ -117,10 +137,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # initialize to prior means
         lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
-        lmbda[0] = (
-            2 * (lambda_odds_prior / (1. + lambda_odds_prior)) - 1)
         lmbda_sigma = lambda_var_prior * np.ones(
             (n_layers, n_features, n_features))
+
+        # reference layer lambda initialized to one
+        lmbda[0] = 1.
         lmbda_sigma[0] = (
             (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
         lmbda_logit_prior = np.log(lambda_odds_prior)
@@ -253,18 +274,15 @@ def calculate_probabilities(X, lmbda, delta):
 
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
-    dist = np.zeros(
-        (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             deltakt = delta[k, t].reshape(-1, 1)
             eta = np.add(deltakt, deltakt.T)
             if X is not None:
-                dist[k, t] = np.dot(X[t] * lmbda[k], X[t].T)
-                eta += dist[k, t]
+                eta += np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
 
-    return probas, dist
+    return probas
 
 
 class DynamicMultilayerNetworkLSM(object):
@@ -337,8 +355,11 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
-                 a=4.0, b=20.0, c=2., d=2.,
-                 a_delta=6.0, b_delta=4.0, c_delta=20., d_delta=2.0,
+                 #a=4.0, b=20.0, c=2., d=2.,
+                 #a_delta=6.0, b_delta=4.0, c_delta=20., d_delta=2.0,
+                 # a = 2 (2 + eps), b = 2 (1 + eps) * E[tau_sq], eps = 0.05
+                 a=4.1, b=2.1 * 10, c=2., d=2.,
+                 a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
                  n_init=1, max_iter=500, tol=1e-2,
                  n_jobs=-1, random_state=42):
         self.n_features = n_features
@@ -404,8 +425,17 @@ class DynamicMultilayerNetworkLSM(object):
         self._set_parameters(best_model)
 
         # calculate dyad-probabilities
-        self.probas_, self.dist_ = calculate_probabilities(
+        self.probas_ = calculate_probabilities(
             self.X_, self.lambda_, self.delta_)
+
+        # identifiable distances
+        n_layers, n_time_steps, n_nodes, _ = Y.shape
+        self.dist_ = np.zeros(
+            (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+        for k in range(n_layers):
+            for t in range(n_time_steps):
+                self.dist_[k, t] = np.dot(
+                    self.Z_[t] * self.lambda_[k], self.Z_[t].T)
 
         # calculate in-sample AUC
         self.auc_ = calculate_auc(Y, self.probas_)
@@ -451,6 +481,24 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_sigma_ = model.X_sigma_
         self.X_cross_cov_ = model.X_cross_cov_
 
+        # transform to identifiable parameterization
+        if self.X_ is not None:
+            self.Z_ = (self.X_ -
+                np.expand_dims(np.mean(self.X_, axis=1), axis=1))
+
+            n_time_steps, n_nodes, n_features = self.X_.shape
+            self.Z_sigma_ = np.zeros(
+                (n_time_steps, n_nodes, n_features, n_features))
+            for i in range(n_nodes):
+                self.Z_sigma_[:, i] = (
+                    ((1 - 1./n_nodes) ** 2) * self.X_sigma_[:, i])
+                self.Z_sigma_[:, i] -= ((1./n_nodes) ** 2) * np.sum(
+                    self.X_sigma_[:, [j for j in range(n_nodes) if j != i]],
+                    axis=1)
+        else:
+            self.Z_ = None
+            self.Z_sigma_ = None
+
         self.a_tau_sq_ = model.a_tau_sq_
         self.b_tau_sq_ = model.b_tau_sq_
         self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
@@ -459,7 +507,6 @@ class DynamicMultilayerNetworkLSM(object):
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
 
         self.lambda_ = model.lambda_
-
         if self.lambda_ is not None:
             self.lambda_[0] = np.sign(model.lambda_[0])
             self.lambda_proba_ = (model.lambda_[0] + 1) / 2.
@@ -472,6 +519,15 @@ class DynamicMultilayerNetworkLSM(object):
         self.delta_sigma_ = model.delta_sigma_
         self.delta_cross_cov_ = model.delta_cross_cov_
 
+        # transform to identifiable parameters (requires sampling)
+        if self.X_ is not None:
+            self.gammas_, self.gamma_, self.gamma_ci_ = sample_socialities(
+                self, size=2500, random_state=self.random_state)
+        else:
+            self.gammas_ = None
+            self.gamma_ = None
+            self.gamma_ci_ = None
+
         self.a_tau_sq_delta_ = model.a_tau_sq_delta_
         self.b_tau_sq_delta_ = model.b_tau_sq_delta_
         self.tau_sq_delta_ = self.b_tau_sq_delta_ / (self.a_tau_sq_delta_ - 1)
@@ -483,6 +539,41 @@ class DynamicMultilayerNetworkLSM(object):
         self.logp_ = model.logp_
         self.converged_ = model.converged_
 
+    def sample(self, size=1, random_state=None):
+        rng = check_random_state(random_state)
+
+        n_layers, n_time_steps, n_nodes = self.delta_.shape
+
+        deltas = np.zeros((size, n_layers, n_time_steps, n_nodes))
+        if self.X_ is not None:
+            Xs = np.zeros((size, n_time_steps, n_nodes, self.n_features))
+            lambdas = np.zeros((size, n_layers, self.n_features))
+        else:
+            Xs = None
+            lambdas = None
+
+        for i in range(n_nodes):
+            if self.X_ is not None:
+                Xs[:, :, i, :] = sample_gssm(
+                    self.X_[:, i], self.X_sigma_[:, i],
+                    self.X_cross_cov_[:, i], size=size, random_state=rng)
+
+            for k in range(n_layers):
+                deltas[:, k, :, i] = sample_gssm(
+                    self.delta_[k, :, i], self.delta_sigma_[k, :, i],
+                    self.delta_cross_cov_[k, :, i],
+                    size=size, random_state=rng)
+
+        if self.X_ is not None:
+            lambdas[:, 0, :] = (
+                2 * rng.binomial(1, p=self.lambda_proba_,
+                                 size=(size, self.n_features)) - 1)
+            for k in range(1, n_layers):
+                lambdas[:, k, :] = rng.multivariate_normal(
+                    mean=self.lambda_[k], cov=self.lambda_sigma_[k],
+                    size=size)
+
+        return deltas, Xs, lambdas
 
 
 def fit_layer(Y, k, **est_kwargs):

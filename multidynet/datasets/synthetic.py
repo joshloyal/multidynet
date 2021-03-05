@@ -23,13 +23,17 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
     Y = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     probas = np.zeros(
         (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
+    dists = np.zeros(
+        (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
     for k in range(n_layers):
         for t in range(n_time_steps):
             # sample the adjacency matrix
             deltak = delta[k, t].reshape(-1, 1)
             eta = np.add(deltak, deltak.T)
             if X is not None:
-                eta += np.dot(X[t] * lmbda[k], X[t].T)
+                dists[k, t] = np.dot(X[t] * lmbda[k], X[t].T)
+                eta += dists[k, t]
+
             probas[k, t] = expit(eta)
 
             Y[k, t] = rng.binomial(1, probas[k, t]).astype(np.int)
@@ -38,7 +42,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
             Y[k, t] = np.tril(Y[k, t], k=-1)
             Y[k, t] += Y[k, t].T
 
-    return Y, probas
+    return Y, probas, dists
 
 
 def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
@@ -79,14 +83,15 @@ def simple_dynamic_multilayer_network(n_nodes=100, n_time_steps=4,
             delta[k, t] = delta[k, t-1] + np.sqrt(0.1) * rng.randn(n_nodes)
 
     # construct the network
-    Y, probas = multilayer_network_from_dynamic_latent_space(
+    Y, probas, dists = multilayer_network_from_dynamic_latent_space(
         X, lmbda, delta, random_state=rng)
 
-    return Y, X, lmbda, delta, probas
+    return Y, X, lmbda, delta, probas, dists
 
 
 def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
                                n_features=2, tau_sq=4.0, sigma_sq=0.05,
+                               include_delta=True,
                                sigma_sq_delta=0.1, random_state=42):
     rng = check_random_state(random_state)
 
@@ -96,9 +101,11 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
         X[0] = np.sqrt(tau_sq) * rng.randn(n_nodes, n_features)
+        X[0] -= np.mean(X[0], axis=0)
         for t in range(1, n_time_steps):
             X[t] = X[t-1] + np.sqrt(sigma_sq) * rng.randn(n_nodes, n_features)
-        X -= np.mean(X, axis=(0, 1))
+            X[t] -= np.mean(X[t], axis=0)
+        #X -= np.mean(X, axis=(0, 1))
 
         # sample assortativity parameters from a U(-2, 2)
         lmbda = np.zeros((n_layers, n_features))
@@ -112,17 +119,18 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
 
     # sample degree effects from a U(-4, 4)
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
-    for k in range(n_layers):
-        delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
-        for t in range(1, n_time_steps):
-            delta[k, t] = (
-                delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
+    if include_delta:
+        for k in range(n_layers):
+            delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
+            for t in range(1, n_time_steps):
+                delta[k, t] = (
+                    delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
 
     # construct the network
-    Y, probas = multilayer_network_from_dynamic_latent_space(
+    Y, probas, dists = multilayer_network_from_dynamic_latent_space(
         X, lmbda, delta, random_state=rng)
 
-    return Y, X, lmbda, delta, probas
+    return Y, X, lmbda, delta, probas, dists
 
 
 def network_from_dynamic_latent_space(X, delta, random_state=None):

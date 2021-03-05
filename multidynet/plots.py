@@ -62,19 +62,26 @@ def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
 
 
 def plot_network(Y, X, X_sigma=None, delta=None,
-                 z=None, tau_sq=None, normalize=True, figsize=(8, 6),
+                 z=None, tau_sq=None, normalize=False, figsize=(8, 6),
                  node_color='orangered', color_distance=False,
-                 alpha=1.0, contour_alpha=0.25,
+                 colors=None, alpha=1.0, contour_alpha=0.25,
                  size=300, edge_width=0.25, node_labels=None,
-                 font_size=12, with_labels=False):
-    fig, ax = plt.subplots(figsize=figsize)
+                 font_size=12, legend_fontsize=12,
+                 with_labels=False, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = None
 
     r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
     if normalize:
         X = X / r
 
-    cmap = ListedColormap(
-        sns.light_palette(node_color, n_colors=np.unique(r).shape[0]))
+    cmap = None
+    if not isinstance(node_color, np.ndarray):
+        cmap = ListedColormap(
+            sns.light_palette(node_color, n_colors=np.unique(r).shape[0]))
+
     G = nx.from_numpy_array(Y)
     if node_labels is not None:
         labels = {node_id : label for node_id, label in enumerate(node_labels)}
@@ -82,13 +89,15 @@ def plot_network(Y, X, X_sigma=None, delta=None,
         labels = None
 
     if z is None:
-        if color_distance:
-            node_color = r.ravel() / r.min()
-        else:
-            node_color = np.asarray([node_color] * X.shape[0])
+        if not isinstance(node_color, np.ndarray):
+            if color_distance:
+                node_color = r.ravel() / r.min()
+            else:
+                node_color = np.asarray([node_color] * X.shape[0])
     else:
         encoder = LabelEncoder().fit(z)
-        colors = get_colors(z.ravel())
+        if colors is None:
+            colors = get_colors(z.ravel())
         node_color = colors[encoder.transform(z)]
 
         # add a legend
@@ -100,9 +109,14 @@ def plot_network(Y, X, X_sigma=None, delta=None,
     # draw latent position credible interval ellipses
     if X_sigma is not None:
         for i in range(X.shape[0]):
+            if isinstance(contour_alpha, np.ndarray):
+                calpha = contour_alpha[i]
+            else:
+                calpha = contour_alpha
+
             normal_contour(X[i], X_sigma[i], edgecolor='gray',
-                           facecolor=node_color[i] if z is not None else 'gray',
-                           alpha=contour_alpha, ax=ax, n_std=[2])
+                           facecolor=node_color[i] if isinstance(node_color, np.ndarray) else 'gray',
+                           alpha=calpha, ax=ax, n_std=[2])
 
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
                      node_color=node_color,
@@ -139,7 +153,7 @@ def plot_network(Y, X, X_sigma=None, delta=None,
 
     if z is not None:
         ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6,
-                  fontsize=12)
+                  fontsize=legend_fontsize)
 
     return fig, ax
 
@@ -244,13 +258,18 @@ def plot_social_trajectories(
     else:
         fig = None
 
+    ax.set_clip_on(False)
+
     if node_labels is None:
         node_labels = [str(i + 1) for i in range(model.delta_.shape[2])]
     node_labels = np.asarray(node_labels)
 
 
     for i in range(n_nodes):
-        ax.plot(model.delta_[k, :, i].T, 'k-', alpha=alpha)
+        if model.X_ is None:
+            ax.plot(model.delta_[k, :, i].T, 'k-', alpha=alpha)
+        else:
+            ax.plot(model.gamma_[k, :, i].T, 'k-', alpha=alpha)
 
     if node_list is not None:
         node_list = np.asarray(node_list)
@@ -259,14 +278,19 @@ def plot_social_trajectories(
 
         for i, node_label in enumerate(node_list):
             node_id = np.where(node_labels == node_label)[0].item()
-            ax.plot(model.delta_[k, :, node_id].T, '-',
-                    lw=line_width, c=node_colors[i])
+            if model.X_ is None:
+                ax.plot(model.delta_[k, :, node_id].T, '--',
+                        lw=line_width, c=node_colors[i])
+            else:
+                ax.plot(model.gamma_[k, :, node_id].T, '--',
+                        lw=line_width, c=node_colors[i])
             ax.annotate(node_label,
                         xy=(n_time_steps + label_offset,
                             model.delta_[k, -1, node_id]),
-                        color=node_colors[i], fontsize=fontsize)
+                        color=node_colors[i], fontsize=fontsize,
+                        annotation_clip=False)
 
-            if q_alpha is not None:
+            if q_alpha is not None and model.X_ is None:
                 x_upp = np.zeros(n_time_steps)
                 x_low = np.zeros(n_time_steps)
                 z_alpha = norm.ppf(1 - q_alpha / 2.)
@@ -277,9 +301,17 @@ def plot_social_trajectories(
                     x_low[t] = model.delta_[k, t, node_id] - se
                 ax.fill_between(
                     ts, x_low, x_upp, alpha=fill_alpha, color=node_colors[i])
+            elif q_alpha is not None:
+                gamma_ci = np.quantile(
+                    model.gammas_, [q_alpha/2., 1 - q_alpha/2.], axis=0)
+                ax.fill_between(
+                    np.arange(n_time_steps), gamma_ci[0, k, :, node_id],
+                    gamma_ci[1, k, :, node_id],
+                    alpha=fill_alpha, color=node_colors[i])
 
     if plot_hline:
-        ax.hlines(ref_value, 0, n_time_steps - 1, lw=2, linestyles='--', color='k')
+        ax.hlines(
+            ref_value, 0, n_time_steps - 1, lw=2, linestyles='--', color='k')
 
         if ref_label:
             ax.annotate(ref_label,
@@ -287,10 +319,10 @@ def plot_social_trajectories(
                         color='k', fontsize=fontsize)
 
     # remove spines
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
+    #ax.spines['right'].set_visible(False)
+    #ax.spines['left'].set_visible(False)
+    #ax.spines['top'].set_visible(False)
+    #ax.spines['bottom'].set_visible(False)
 
     # axis-labels
     ax.set_ylabel('Sociality', fontsize=fontsize)
@@ -323,7 +355,7 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
     if node_colors is None:
         node_colors = get_colors(np.arange(len(node_list)))
 
-    n_time_steps, n_nodes, n_features = model.X_.shape
+    n_time_steps, n_nodes, n_features = model.Z_.shape
     z_alpha = norm.ppf(1 - q_alpha / 2.)
     ts = np.arange(n_time_steps)
     for i, node_label in enumerate(node_list):
@@ -331,12 +363,12 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
         x_upp = np.zeros(n_time_steps)
         x_low = np.zeros(n_time_steps)
         for p in range(n_features):
-            ax[p].plot(ts, model.X_[:, node_id, p], linestyle,
+            ax[p].plot(ts, model.Z_[:, node_id, p], linestyle,
                        label=node_labels[node_id], c=node_colors[i])
             for t in range(n_time_steps):
-                se = z_alpha * np.sqrt(model.X_sigma_[t, node_id, p, p])
-                x_upp[t] = model.X_[t, node_id, p] + se
-                x_low[t] = model.X_[t, node_id, p] - se
+                se = z_alpha * np.sqrt(model.Z_sigma_[t, node_id, p, p])
+                x_upp[t] = model.Z_[t, node_id, p] + se
+                x_low[t] = model.Z_[t, node_id, p] - se
             ax[p].fill_between(
                 ts, x_low, x_upp, alpha=alpha, color=node_colors[i])
 
@@ -345,9 +377,11 @@ def plot_node_trajectories(model, node_list, q_alpha=0.05, node_labels=None,
     ax[-1].set_xlabel('t')
     for p in range(n_features):
         #ax[p].set_title('p = {}'.format(p + 1), fontsize=fontsize)
-        ax[p].hlines(0, 1, n_time_steps, lw=2, linestyles='dotted', color='k')
-        ax[p].set_ylabel('Latent Position [p = {}]'.format(p + 1),
+        ax[p].hlines(0, 1, n_time_steps, lw=2, linestyles='dotted', color='k', alpha=0)
+        ax[p].set_ylabel('Latent Position [h = {}]'.format(p + 1),
                          fontsize=fontsize)
+        ax[p].tick_params(axis='x', labelsize=fontsize)
+        ax[p].tick_params(axis='y', labelsize=fontsize)
 
     plt.subplots_adjust(right=0.7)
 
@@ -503,8 +537,12 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
                                 node_labels=None,
                                 layer_labels=None, q_alpha=0.05, n_reps=1000,
                                 random_state=123, alpha=0.2, linestyle='--',
-                                figsize=(10, 8)):
-    fig, ax = plt.subplots(figsize=figsize)
+                                fontsize=16, figsize=(10, 8), ax=None):
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = None
 
 
     if node_labels is None:
@@ -551,9 +589,9 @@ def plot_pairwise_probabilities(model, node_i, node_j, horizon=0,
             ax.fill_between(ts, pi_low, pi_upp, alpha=alpha)
 
     # accomodate legends and title
-    ax.legend(bbox_to_anchor=(1.04, 1), loc='upper left')
+    ax.legend(bbox_to_anchor=(1.04, 1), loc='upper left', fontsize=fontsize)
     ax.set_xlabel('t')
-    ax.set_ylabel('Link Probability ({} - {})'.format(node_i, node_j))
+    ax.set_ylabel('Link Probability ({} - {})'.format(node_i, node_j), fontsize=fontsize)
 
     return fig, ax
 
@@ -586,7 +624,7 @@ def plot_homophily_matrix(model, q_alpha=0.05,
 
             lmbda = model.lambda_[k, p]
             if k == 0:
-                txt = '{}    (p = {})'.format(lmbda, p+1)
+                txt = '{}    (d = {})'.format(lmbda, p+1)
             else:
                 txt = '{:.3f} ({:.3f}, {:.3f})'.format(
                     lmbda, lmbda - xerr[k], lmbda + xerr[k])
@@ -603,7 +641,7 @@ def plot_homophily_matrix(model, q_alpha=0.05,
             axes[k].tick_params(bottom=False)
 
 
-    axes[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
+    axes[-1].set_xlabel('Homophily Parameter ($\lambda_{kd}$)',
                         fontsize=fontsize)
 
     x_max = max([ax.get_xlim()[1] for ax in axes.flat])
@@ -721,9 +759,9 @@ def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
         ax.set_yticks(np.arange(n_layers))
         ax.set_yticklabels(layer_labels, fontsize=fontsize)
         ax.invert_yaxis()
-        ax.set_title('p = {}'.format(p + 1), fontsize=fontsize)
+        ax.set_title('h = {}'.format(p + 1), fontsize=fontsize)
 
-        axes.flat[-1].set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
+        axes.flat[-1].set_xlabel('Homophily Parameter ($\lambda_{kh}$)',
                                  fontsize=fontsize)
 
     x_max = max([ax.get_xlim()[1] for ax in axes.flat])
@@ -771,11 +809,16 @@ def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
         plt.setp(ax.lines, color='black')
 
         ax.set_xticks([i for i in range(0, n_time_steps, time_step)])
-        ax.tick_params(axis='y', labelsize=12)
+        ax.tick_params(axis='y', labelsize=16)
+        ax.tick_params(axis='x', labelsize=16)
 
         ax.grid(axis='x')
         ax.set_title(layer_labels[k], fontsize=24)
-        ax.set_xlabel(xlabel, fontsize=16)
-        ax.set_ylabel(stat_label, fontsize=16)
+        ax.set_xlabel(xlabel, fontsize=24)
+
+        if k == 0:
+            ax.set_ylabel(stat_label, fontsize=24)
+        else:
+            ax.set_ylabel('')
 
     return fig, axes
