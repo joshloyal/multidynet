@@ -2,8 +2,15 @@ import numpy as np
 
 from math import ceil
 
+from joblib import Parallel, delayed
 from sklearn.utils import check_random_state
 from sklearn.model_selection import KFold
+
+
+from .multidynet import DynamicMultilayerNetworkLSM
+
+
+MAX_INT = np.iinfo(np.int32).max
 
 
 def train_test_split_dyads(Y, test_size=0.1, random_state=None):
@@ -101,3 +108,27 @@ def network_cross_validation(Y, n_folds=4, random_state=None):
     kfolds = KFold(n_splits=n_folds, shuffle=True, random_state=rng)
     for _, test_nodes in kfolds.split(np.arange(Y.shape[2])):
         yield train_test_split_nodes(Y, test_nodes=test_nodes, random_state=rng)
+
+
+def fit_single(Y, n_features, model_params, random_state=None):
+    model_params['n_features'] = n_features
+    model_params['random_state'] = random_state
+
+    return DynamicMultilayerNetworkLSM(**model_params).fit(Y)
+
+
+
+def select_dimension(Y, n_features=None, model_params=None,
+                     n_jobs=1, random_state=None):
+    random_state = check_random_state(random_state)
+
+    n_features = np.arange(6) if n_features is None else n_features
+    model_params = dict() if model_params is None else model_params
+
+    seeds = random_state.randint(MAX_INT, size=len(n_features))
+
+    models = Parallel(n_jobs=n_jobs)(delayed(fit_single)(
+        Y, n_features=n_features[d], model_params=model_params.copy(),
+        random_state=seed) for d, seed in enumerate(seeds))
+
+    return models

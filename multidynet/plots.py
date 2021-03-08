@@ -65,7 +65,8 @@ def plot_network(Y, X, X_sigma=None, delta=None,
                  z=None, tau_sq=None, normalize=False, figsize=(8, 6),
                  node_color='orangered', color_distance=False,
                  colors=None, alpha=1.0, contour_alpha=0.25,
-                 size=300, edge_width=0.25, node_labels=None,
+                 size=300, edgecolors='w',
+                 edge_width=0.25, node_labels=None,
                  font_size=12, legend_fontsize=12,
                  with_labels=False, ax=None):
     if ax is None:
@@ -126,6 +127,7 @@ def plot_network(Y, X, X_sigma=None, delta=None,
                      labels=labels,
                      font_size=font_size,
                      with_labels=with_labels,
+                     edgecolors=edgecolors,
                      ax=ax)
 
     if delta is not None:

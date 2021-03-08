@@ -294,6 +294,18 @@ class DynamicMultilayerNetworkLSM(object):
         The number of latent features. This is the dimension of the
         latent space.
 
+    n_init : int (default=1)
+        The number of initializations to perform. The result with the highest
+        expected log-likelihood is kept.
+
+    max_iter : int (default=500)
+        The number of coordinate ascent variational inference (CAVI) iterations
+        to perform.
+
+    tol : float (default=1e-2)
+        The convergence threshold. CAVI iterations will stop when the expected
+        log-likelihood gain is below this threshold.
+
     lambda_odds_prior : float (default=2)
         The prior odds of a component in the reference layering being positive.
         Our prior assumes an assortative reference layer is twice as likely
@@ -330,23 +342,11 @@ class DynamicMultilayerNetworkLSM(object):
         Scale parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
         on `sigma_sq_delta`.
 
-    n_init : int (default=1)
-        The number of initializations to perform. The result with the highest
-        expected log-likelihood is kept.
-
-    max_iter : int (default=500)
-        The number of coordinate ascent variational inference (CAVI) iterations
-        to perform.
-
-    tol : float (default=1e-2)
-        The convergence threshold. CAVI iterations will stop when the expected
-        log-likelihood gain is below this threshold.
-
-    n_jobs : int (default=-1)
+    n_jobs : int (default=1)
         The number of jobs to run in parallel. The number of initializations are
         run in parallel. `-1` means using all processors.
 
-    random_state : int, RandomState instance or None (default=42)
+    random_state : int, RandomState instance or None (default=None)
         Controls the random seed given to the method chosen to initialize
         the parameters. In addition, it controls generation of random samples
         from the fitted posterior distribution. Pass an int for reproducible
@@ -358,7 +358,7 @@ class DynamicMultilayerNetworkLSM(object):
                  a=4.1, b=2.1 * 10, c=2., d=2.,
                  a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
                  n_init=1, max_iter=1000, tol=1e-2,
-                 n_jobs=-1, random_state=42):
+                 n_jobs=1, random_state=None):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
@@ -429,10 +429,11 @@ class DynamicMultilayerNetworkLSM(object):
         n_layers, n_time_steps, n_nodes, _ = Y.shape
         self.dist_ = np.zeros(
             (n_layers, n_time_steps, n_nodes, n_nodes), dtype=np.float64)
-        for k in range(n_layers):
-            for t in range(n_time_steps):
-                self.dist_[k, t] = np.dot(
-                    self.Z_[t] * self.lambda_[k], self.Z_[t].T)
+        if self.n_features_ > 0:
+            for k in range(n_layers):
+                for t in range(n_time_steps):
+                    self.dist_[k, t] = np.dot(
+                        self.Z_[t] * self.lambda_[k], self.Z_[t].T)
 
         # calculate in-sample AUC
         self.auc_ = calculate_auc(Y, self.probas_)
@@ -551,9 +552,12 @@ class DynamicMultilayerNetworkLSM(object):
 
         for i in range(n_nodes):
             if self.X_ is not None:
-                Xs[:, :, i, :] = sample_gssm(
+                X_sampled = sample_gssm(
                     self.X_[:, i], self.X_sigma_[:, i],
                     self.X_cross_cov_[:, i], size=size, random_state=rng)
+                if self.n_features_ == 1:
+                    X_sampled = np.expand_dims(X_sampled, axis=-1)
+                Xs[:, :, i, :] = X_sampled
 
             for k in range(n_layers):
                 deltas[:, k, :, i] = sample_gssm(

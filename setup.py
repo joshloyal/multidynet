@@ -135,7 +135,7 @@ def generate_extensions(macros=[]):
 
 DISTNAME = 'multidynet'
 DESCRIPTION = 'multidynet'
-with open('README.rst') as f:
+with open('README.md') as f:
     LONG_DESCRIPTION = f.read()
 MAINTAINER = 'Joshua D. Loyal'
 MAINTAINER_EMAIL = 'jloyal25@gmail.com'
