@@ -10,8 +10,6 @@ from sklearn.utils import check_array, check_random_state
 from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 
-from .dic import calculate_dic
-from .waic import calculate_waic
 from .omega import update_omega
 from .lds import update_latent_positions
 from .deltas_lds import update_deltas
@@ -351,6 +349,19 @@ class DynamicMultilayerNetworkLSM(object):
         the parameters. In addition, it controls generation of random samples
         from the fitted posterior distribution. Pass an int for reproducible
         output across multiple function calls.
+
+    Examples
+    --------
+
+    >>> from multidynet import DynamicMultilayerNetworkLSM
+    >>> from dynetlsm.datasets import load_households
+    >>> Y =
+    >>> Y.shape
+    (,,,)
+    >>> model = DynamicMultilayerNetworkLSM().fit(Y)
+
+    References
+    ----------
     """
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
@@ -377,10 +388,23 @@ class DynamicMultilayerNetworkLSM(object):
         self.random_state = random_state
 
     def fit(self, Y):
-        """
+        """Infer the approximate variational posterior of the eigenmodel
+        for dynamic multilayer networks based on the observed network Y.
+
         Parameters
         ----------
         Y : array-like, shape (n_layers, n_time_steps, n_nodes, n_nodes)
+            The training dynamic multilayer network. The networks should be
+            represented as binary undirected adjacency matrices. For example,
+            Y[0] is an array of shape (n_time_steps, n_nodes, n_nodes)
+            corresponding to the adjacency matrices of the networks at in
+            the first layer. The network should be stored as
+            ``dtype=np.float64``.
+
+        Returns
+        -------
+        self : DynamicMultilayerNetworkLSM
+            Fitted estimator.
         """
         Y = check_array(Y, order='C', dtype=np.float64,
                         ensure_2d=False, allow_nd=True, copy=False)
@@ -461,15 +485,6 @@ class DynamicMultilayerNetworkLSM(object):
             self.p_bic_ += logn * np.prod(self.lambda_.shape)
         self.bic_ = -2 * self.loglik_ + self.p_bic_
 
-        # DIC (approximate with posterior samples)
-        #self.dic_, self.p_dic_ = calculate_dic(
-        #    self, random_state=random_state)
-
-        ## WAIC (only supported for no missing edges)
-        #if not np.any(Y == -1):
-        #    self.waic_, self.p_waic_ = calculate_waic(
-        #        self, Y, random_state=random_state)
-
         return self
 
     def _set_parameters(self, model):
@@ -538,6 +553,24 @@ class DynamicMultilayerNetworkLSM(object):
         self.converged_ = model.converged_
 
     def sample(self, size=1, random_state=None):
+        """Sample parameters from the model's approximate posterior.
+
+        Parameters
+        ----------
+        size : int, (default=1)
+            Number of samples to draw from the approximate posterior.
+
+        Returns
+        -------
+        deltas  : np.ndarray of shape (size, n_layers, n_time_steps, n_nodes)
+            The social trajectories of each node.
+
+        Xs : np.ndarray of shape (size, n_time_steps, n_nodes, n_features)
+            The latent trajectories of each node
+
+        lambdas : np.ndarray of shape (size, n_layers, n_features)
+            The homophily coefficients.
+        """
         rng = check_random_state(random_state)
 
         n_layers, n_time_steps, n_nodes = self.delta_.shape
