@@ -121,8 +121,8 @@ def make_extension(ext_name, macros=[]):
         mod_name,
         sources=[ext_path] + get_sources(),
         include_dirs=include_dirs,
-        extra_compile_args=["-O3", "-Wall", "-fPIC", "-fopenmp"],
-        extra_link_args=["-fopenmp"],
+        extra_compile_args=["-O3", "-Wall", "-fPIC"],#, "-fopenmp"],
+        #extra_link_args=["-fopenmp"],
         define_macros=macros)
 
 

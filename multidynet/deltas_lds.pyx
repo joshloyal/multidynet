@@ -129,3 +129,42 @@ def update_deltas(const double[:, :, :, ::1] Y,
 
             delta[k, :, i], delta_sigma[k, :, i], delta_cross_cov[k, :, i] = (
                 kalman_smoother(A, B, tau_prec, sigma_prec))
+
+
+def update_deltas_MF(const double[:, :, :, ::1] Y,
+                  np.ndarray[double, ndim=3, mode='c'] delta,
+                  np.ndarray[double, ndim=3, mode='c'] delta_sigma,
+                  np.ndarray[double, ndim=3, mode='c'] delta_cross_cov,
+                  double[:, :, :, ::1] XLX,
+                  double[:, :, :, ::1] omega,
+                  double tau_prec,
+                  double sigma_prec):
+    """Mean Field VB update"""
+    cdef size_t k, i, t
+    cdef size_t n_layers = Y.shape[0]
+    cdef size_t n_time_steps = Y.shape[1]
+    cdef size_t n_nodes = Y.shape[2]
+    cdef np.ndarray[double, ndim=1, mode='c'] A
+    cdef np.ndarray[double, ndim=1, mode='c'] B
+
+    for k in range(n_layers):
+        for i in range(n_nodes):
+            A, B = calculate_natural_parameters(
+                Y, XLX, delta, omega, k, i)
+
+            # t = 1
+            delta_sigma[k, 0, i] = 1. / (B[0] + 2 * tau_prec)
+            delta[k, 0, i] = delta_sigma[k, 0, i] * A[0]
+
+            # 1 < t <= T
+            for t in range(1, n_time_steps):
+                delta_sigma[k, t, i] = 1. / (B[t] + 2 * sigma_prec)
+
+                # t = T
+                if t == (n_time_steps - 1):
+                    delta[k, t, i] = delta_sigma[k, t, i] * (
+                            A[t] + sigma_prec * delta[k, t-1, i])
+                else:
+                    delta[k, t, i] = delta_sigma[k, t, i] * (
+                            (A[t] + sigma_prec *
+                                (delta[k, t-1, i] + delta[k, t+1, i])))

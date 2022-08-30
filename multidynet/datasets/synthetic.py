@@ -121,7 +121,7 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
     if include_delta:
         for k in range(n_layers):
-            delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
+            delta[k, 0] = -3 + rng.uniform(-4, 4, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (
                     delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))

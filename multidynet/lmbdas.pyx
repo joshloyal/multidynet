@@ -105,6 +105,11 @@ def update_lambdas(const double[:, :, :, ::1] Y,
             Y, X, X_sigma, delta,  omega, lmbda[0], p)
         proba = expit(eta + lmbda_logit_prior)
         lmbda[0, p] = 2 * proba - 1
+        if lmbda[0, p] <= 0.0:
+            lmbda[0, p] += 1e-5
+        elif lmbda[0, p] >= 1.0:
+            lmbda[0, p] -= 1e-5
+
         lmbda_sigma[0, p, p] = 1 - lmbda[0, p] ** 2
 
     for k in range(1, n_layers):

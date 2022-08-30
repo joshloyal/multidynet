@@ -168,3 +168,44 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
             A, B, tau_prec, sigma_prec)
+
+
+def update_latent_positions_MF(const double[:, :, :, ::1] Y,
+                               np.ndarray[double, ndim=3, mode='c'] X,
+                               np.ndarray[double, ndim=4, mode='c'] X_sigma,
+                               np.ndarray[double, ndim=4, mode='c'] X_cross_cov,
+                               double[:, ::1] lmbda,
+                               double[:, :, ::1] lmbda_sigma,
+                               double[:, :, ::1] delta,
+                               double[:, :, :, ::1] omega,
+                               double tau_prec,
+                               double sigma_prec):
+    cdef size_t i, t
+    cdef size_t n_time_steps = X.shape[0]
+    cdef size_t n_nodes = X.shape[1]
+    cdef size_t n_features = lmbda.shape[1]
+    cdef np.ndarray[double, ndim=2, mode='c'] A
+    cdef np.ndarray[double, ndim=3, mode='c'] B
+    cdef np.ndarray[double, ndim=2, mode='c'] tau_precision = (
+        tau_prec * np.eye(n_features))
+    cdef np.ndarray[double, ndim=2, mode='c'] sigma_precision = (
+        sigma_prec * np.eye(n_features))
+
+    for i in range(n_nodes):
+        A, B = calculate_natural_parameters(
+            Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
+
+        # t = 1
+        X_sigma[0, i] = np.linalg.pinv(B[0] + 2 * tau_precision)
+        X[0, i] = np.dot(X_sigma[0, i], A[0])
+
+        # 1 < t < T
+        for t in range(1, n_time_steps):
+            X_sigma[t, i] = np.linalg.pinv(
+                    B[t] + 2 * sigma_precision)
+
+            if t == (n_time_steps - 1):
+                X[t, i] = X_sigma[t, i] @ (A[t] + sigma_precision @ X[t-1, i])
+            else:
+                X[t, i] = np.dot(X_sigma[t, i],
+                        A[t] + sigma_precision @ (X[t-1, i] + X[t+1, i]))
