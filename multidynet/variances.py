@@ -12,6 +12,25 @@ def update_tau_sq(Y, X, X_sigma, a, b):
     return a_tau_sq, b_tau_sq
 
 
+def update_diag_tau_sq(Y, X, X_sigma, a, b):
+    _, n_nodes, n_features = X.shape
+
+    a_tau_sq = np.full(n_features, a + n_nodes)
+    b_tau_sq = (b + np.diagonal(X_sigma[0], axis1=2, axis2=1).sum(axis=0) +
+            (X[0] ** 2).sum(axis=0))
+
+    return a_tau_sq, b_tau_sq
+
+
+def update_X0_precision(Y, X, X_sigma, df, scale):
+    _, n_nodes, n_features = X.shape
+
+    X0_cov_df = df + n_nodes
+    X0_cov_scale = scale + (X_sigma[0].sum(axis=0) + X[0].T @ X[0])
+
+    return X0_cov_df, np.linalg.pinv(X0_cov_scale)
+
+
 def update_tau_sq_delta(delta, delta_sigma, a, b):
     n_layers, _, n_nodes = delta.shape
     a_tau_sq = a + n_nodes * n_layers

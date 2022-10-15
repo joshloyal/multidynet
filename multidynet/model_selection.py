@@ -15,6 +15,18 @@ def dynamic_multilayer_adjacency_to_vec(Y):
     return y
 
 
+def multilayer_adjacency_to_vec(Y):
+    n_layers, n_nodes, _ = Y.shape
+    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+    subdiag = np.tril_indices(n_nodes, k=-1)
+    y = np.zeros((n_layers, n_dyads), dtype=np.float64)
+    for k in range(n_layers):
+        y[k] = Y[k][subdiag]
+
+    return y
+
+
+
 def kfold(Y, n_splits=4, random_state=None):
     """Split dyads into k-folds. A dyad is removed from all time steps and layers.
 

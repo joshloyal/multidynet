@@ -153,18 +153,23 @@ def update_deltas_MF(const double[:, :, :, ::1] Y,
                 Y, XLX, delta, omega, k, i)
 
             # t = 1
-            delta_sigma[k, 0, i] = 1. / (B[0] + 2 * tau_prec)
-            delta[k, 0, i] = delta_sigma[k, 0, i] * A[0]
+            delta_sigma[k, 0, i] = 1. / (B[0] + tau_prec + sigma_prec)
+            if n_time_steps > 1:
+                delta[k, 0, i] = delta_sigma[k, 0, i] * (
+                        A[0] + sigma_prec * delta[k, 1, i])
+            else:
+                delta[k, 0, i] = delta_sigma[k, 0, i] * A[0]
 
             # 1 < t <= T
             for t in range(1, n_time_steps):
-                delta_sigma[k, t, i] = 1. / (B[t] + 2 * sigma_prec)
 
                 # t = T
                 if t == (n_time_steps - 1):
+                    delta_sigma[k, t, i] = 1. / (B[t] + sigma_prec)
                     delta[k, t, i] = delta_sigma[k, t, i] * (
                             A[t] + sigma_prec * delta[k, t-1, i])
                 else:
+                    delta_sigma[k, t, i] = 1. / (B[t] + 2 * sigma_prec)
                     delta[k, t, i] = delta_sigma[k, t, i] * (
                             (A[t] + sigma_prec *
                                 (delta[k, t-1, i] + delta[k, t+1, i])))

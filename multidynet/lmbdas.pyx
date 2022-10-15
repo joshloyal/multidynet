@@ -115,6 +115,5 @@ def update_lambdas(const double[:, :, :, ::1] Y,
     for k in range(1, n_layers):
         eta1, eta2 = calculate_natural_parameters(
             Y, X, X_sigma, delta, omega, lmbda_var_prior, k)
-
         lmbda_sigma[k] = np.linalg.pinv(eta2)
         lmbda[k] = np.dot(lmbda_sigma[k], eta1)

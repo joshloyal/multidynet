@@ -15,7 +15,7 @@ from .omega import update_omega
 from .lds import update_latent_positions, update_latent_positions_MF
 from .deltas_lds import update_deltas, update_deltas_MF
 from .lmbdas import update_lambdas
-from .variances import update_tau_sq, update_sigma_sq
+from .variances import update_tau_sq, update_sigma_sq, update_X0_precision, update_diag_tau_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
 from .log_likelihood import log_likelihood
 from .metrics import calculate_auc
@@ -30,9 +30,10 @@ class ModelParameters(object):
     def __init__(self, omega, X, X_sigma, X_cross_cov,
                  lmbda, lmbda_sigma, lmbda_logit_prior,
                  delta, delta_sigma, delta_cross_cov,
+                 X0_cov_df, X0_cov_scale,
                  a_tau_sq, b_tau_sq, c_sigma_sq, d_sigma_sq,
                  a_tau_sq_delta, b_tau_sq_delta, c_sigma_sq_delta,
-                 d_sigma_sq_delta):
+                 d_sigma_sq_delta, callback):
         self.omega_ = omega
         self.X_ = X
         self.X_sigma_ = X_sigma
@@ -43,6 +44,8 @@ class ModelParameters(object):
         self.delta_ = delta
         self.delta_sigma_ = delta_sigma
         self.delta_cross_cov_ = delta_cross_cov
+        self.X0_cov_df_ = X0_cov_df
+        self.X0_cov_scale_ = X0_cov_scale
         self.a_tau_sq_ = a_tau_sq
         self.b_tau_sq_ = b_tau_sq
         self.c_sigma_sq_ = c_sigma_sq
@@ -53,6 +56,8 @@ class ModelParameters(object):
         self.d_sigma_sq_delta_ = d_sigma_sq_delta
         self.converged_ = False
         self.logp_ = []
+        self.criteria_ = []
+        self.callback_ = callback
 
 
 def sample_socialities(model, size=500, random_state=None):
@@ -104,14 +109,15 @@ def initialize_node_effects(Y):
     for k in range(n_layers):
         for t in range(n_time_steps):
             delta[k, t] = initialize_node_effects_single(Y[k, t])
-            #delta[k, t] = np.random.randn(n_nodes)
 
     return delta
 
 
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                          a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-                          approx_type, random_state):
+                          #a, b, c, d, a_delta, b_delta, c_delta, d_delta,
+                          init_covariance_type, c, d,
+                          a_delta, b_delta, c_delta, d_delta,
+                          approx_type, callback, random_state):
     rng = check_random_state(random_state)
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
@@ -176,8 +182,10 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         delta_cross_cov = np.zeros((n_layers, n_time_steps - 1, n_nodes))
 
     # initialize based on prior information
-    a_tau_sq = a
-    b_tau_sq = b
+    X0_cov_scale = np.eye(n_features)
+    X0_cov_df = n_features + 2
+    a_tau_sq = np.full(n_features, 1.5) # 0.5 * (n_features + 2)
+    b_tau_sq = np.full(n_features, 0.5)
     c_sigma_sq = c
     d_sigma_sq = d
 
@@ -191,29 +199,41 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         lmbda=lmbda, lmbda_sigma=lmbda_sigma,
         lmbda_logit_prior=lmbda_logit_prior,
         delta=delta, delta_sigma=delta_sigma, delta_cross_cov=delta_cross_cov,
+        X0_cov_scale=X0_cov_scale, X0_cov_df=X0_cov_df,
         a_tau_sq=a_tau_sq, b_tau_sq=b_tau_sq, c_sigma_sq=c_sigma_sq,
         d_sigma_sq=d_sigma_sq, a_tau_sq_delta=a_delta, b_tau_sq_delta=b_delta,
-        c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta)
+        c_sigma_sq_delta=c_sigma_sq_delta, d_sigma_sq_delta=d_sigma_sq_delta,
+        callback=callback)
 
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-                  approx_type, max_iter, tol, random_state, verbose=True):
+                  init_covariance_type, c, d,
+                  a_delta, b_delta, c_delta, d_delta,
+                  approx_type, max_iter,  tol, random_state,
+                  stopping_criteria='loglik',
+                  callback=None, verbose=True):
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
-    # convergence criteria (Eq{L(Y | theta)})
-    loglik = -np.infty
+    # convergence criteria:
+    #   loglik: Eq{L(Y | theta)})
+    #   auc: training AUC
+    criteria = -np.infty
+    n_nochange = 0
 
     # initialize parameters of the model
     model = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior,
-        a, b, c, d, a_delta, b_delta, c_delta, d_delta,
-        approx_type, random_state)
+        init_covariance_type, c, d, a_delta, b_delta, c_delta, d_delta,
+        approx_type, callback, random_state)
 
+    a = np.full(n_features, 1.5)  # 0.5 * (n_features + 2)
+    b = np.full(n_features, 0.5)
+    X0_cov_prior_df = n_features + 2
+    X0_cov_prior_scale = np.eye(n_features)
     for n_iter in tqdm(range(max_iter), disable=not verbose):
-        prev_loglik = loglik
+        prev_criteria = criteria
 
         # coordinate ascent
 
@@ -225,9 +245,12 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
             n_features)
 
         # update latent trajectories
-        tau_sq_prec = model.a_tau_sq_ / model.b_tau_sq_
-        sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
+        if init_covariance_type == 'full':
+            X0_cov_prec = model.X0_cov_df_ * model.X0_cov_scale_
+        else:
+            X0_cov_prec = np.diag(model.a_tau_sq_ / model.b_tau_sq_)
 
+        sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
         XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
         if n_features > 0:
@@ -235,12 +258,12 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                 update_latent_positions(
                     Y, model.X_, model.X_sigma_, model.X_cross_cov_,
                     model.lambda_, model.lambda_sigma_, model.delta_,
-                    model.omega_, tau_sq_prec, sigma_sq_prec)
+                    model.omega_, X0_cov_prec, sigma_sq_prec)
             else:
                 update_latent_positions_MF(
                     Y, model.X_, model.X_sigma_, model.X_cross_cov_,
                     model.lambda_, model.lambda_sigma_, model.delta_,
-                    model.omega_, tau_sq_prec, sigma_sq_prec)
+                    model.omega_, X0_cov_prec, sigma_sq_prec)
 
             # update homophily parameters
             update_lambdas(
@@ -268,8 +291,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         # update initial variance of the latent space
         if n_features > 0:
-            model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
-                Y, model.X_, model.X_sigma_, a, b)
+            if init_covariance_type == 'full':
+                model.X0_cov_df_, model.X0_cov_scale_ = update_X0_precision(
+                    Y, model.X_, model.X_sigma_, X0_cov_prior_df,
+                    X0_cov_prior_scale)
+            else:
+                model.a_tau_sq_, model.b_tau_sq_ = update_diag_tau_sq(
+                    Y, model.X_, model.X_sigma_, a, b)
 
             # update step sizes of the latent space
             model.c_sigma_sq_, model.d_sigma_sq_ = update_sigma_sq(
@@ -286,12 +314,34 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         model.logp_.append(loglik)
 
+        # callback
+        if model.callback_ is not None:
+            model.callback_(model, Y)
+
+        if stopping_criteria == 'auc':
+            probas = calculate_probabilities(
+                model.X_, model.lambda_, model.delta_)
+            criteria = calculate_auc(Y, probas)
+        else:
+            criteria = loglik
+        model.criteria_.append(criteria)
+
         # check convergence
-        change = loglik - prev_loglik
-        if abs(change) < tol:
-            model.converged_ = True
-            model.logp_ = np.asarray(model.logp_)
-            break
+        change = criteria - prev_criteria
+        if stopping_criteria == 'auc':
+            if abs(change) < tol and criteria > 0.55:
+                n_nochange += 1
+                if n_nochange > 4:
+                    model.converged_ = True
+                    model.logp_ = np.asarray(model.logp_)
+                    break
+            else:
+                n_nochange = 0
+        else:
+            if abs(change) < tol:
+                model.converged_ = True
+                model.logp_ = np.asarray(model.logp_)
+                break
 
     return model
 
@@ -310,6 +360,19 @@ def calculate_probabilities(X, lmbda, delta):
             if X is not None:
                 eta += np.dot(X[t] * lmbda[k], X[t].T)
             probas[k, t] = expit(eta)
+
+    return probas
+
+
+def calculate_single_proba(X, lmbda, delta):
+    n_layers, n_nodes = delta.shape
+    probas = np.zeros((n_layers, n_nodes, n_nodes))
+    for k in range(n_layers):
+        deltak = delta[k].reshape(-1, 1)
+        eta = np.add(deltak, deltak.T)
+        if X is not None:
+            eta += np.dot(X * lmbda[k], X.T)
+        probas[k] = expit(eta)
 
     return probas
 
@@ -397,16 +460,17 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
-                 a=4.1, b=2.1 * 10, c=2., d=2.,
+                 init_covariance_type='diag',
+                 c=2., d=2.,
                  a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
                  n_init=1, max_iter=1000, tol=1e-2,
+                 stopping_criteria='loglik',
                  approx_type='structured',
                  n_jobs=1, random_state=None):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
-        self.a = a
-        self.b = b
+        self.init_covariance_type = init_covariance_type
         self.c = c
         self.d = d
         self.a_delta = a_delta
@@ -416,11 +480,12 @@ class DynamicMultilayerNetworkLSM(object):
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
+        self.stopping_criteria = stopping_criteria
         self.approx_type = approx_type
         self.n_jobs = n_jobs
         self.random_state = random_state
 
-    def fit(self, Y):
+    def fit(self, Y, callback=None):
         """Infer the approximate variational posterior of the eigenmodel
         for dynamic multilayer networks based on the observed network Y.
 
@@ -457,18 +522,19 @@ class DynamicMultilayerNetworkLSM(object):
         verbose = True if self.n_init == 1 else False
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features_, self.lambda_odds_prior,
-                self.lambda_var_prior,
-                self.a, self.b, self.c, self.d,
+                self.lambda_var_prior, self.init_covariance_type,
+                self.c, self.d,
                 self.a_delta, self.b_delta, self.c_delta, self.d_delta,
                 self.approx_type, self.max_iter, self.tol, seed,
-                verbose=verbose)
+                stopping_criteria=self.stopping_criteria,
+                callback=callback, verbose=verbose)
             for seed in seeds)
 
         # choose model with the largest convergence criteria
         best_model = models[0]
-        best_criteria = models[0].logp_[-1]
+        best_criteria = models[0].criteria_[-1]
         for i in range(1, len(models)):
-            if models[i].logp_[-1] > best_criteria:
+            if models[i].criteria_[-1] > best_criteria:
                 best_model = models[i]
 
         if not best_model.converged_:
@@ -546,9 +612,17 @@ class DynamicMultilayerNetworkLSM(object):
             self.Z_ = None
             self.Z_sigma_ = None
 
-        self.a_tau_sq_ = model.a_tau_sq_
-        self.b_tau_sq_ = model.b_tau_sq_
-        self.tau_sq_ = self.b_tau_sq_ / (self.a_tau_sq_ - 1)
+
+        if self.init_covariance_type == 'full':
+            self.init_cov_df_ = model.X0_cov_df_
+            self.init_cov_scale_ = model.X0_cov_scale_
+            self.init_cov_ = (np.linalg.pinv(self.init_cov_scale_) /
+                (self.init_cov_df_ - n_features - 1))
+        else:
+            self.a_tau_sq_ = model.a_tau_sq_
+            self.b_tau_sq_ = model.b_tau_sq_
+            self.init_cov_ = np.diag(self.b_tau_sq_ / (self.a_tau_sq_ - 1))
+
         self.c_sigma_sq_ = model.c_sigma_sq_
         self.d_sigma_sq_ = model.d_sigma_sq_
         self.sigma_sq_ = self.d_sigma_sq_ / (self.c_sigma_sq_ - 1)
@@ -584,6 +658,8 @@ class DynamicMultilayerNetworkLSM(object):
             self.d_sigma_sq_delta_ / (self.c_sigma_sq_delta_ - 1))
 
         self.logp_ = model.logp_
+        self.criteria_ = model.criteria_
+        self.callback_ = model.callback_
         self.converged_ = model.converged_
 
     def sample(self, size=1, random_state=None):
@@ -660,3 +736,21 @@ class DynamicMultilayerNetworkLSM(object):
                 loglik += -log_loss(y_test, eta_test)
 
         return loglik
+
+    def forecast_probas(self, n_samples=1000, random_state=None):
+        n_time_steps, n_nodes, n_features = self.X_.shape
+        n_layers = self.delta_.shape[0]
+
+        rng = check_random_state(random_state)
+        probas = np.zeros((n_layers, n_nodes, n_nodes))
+        for i in range(n_samples):
+            X_new = (self.X_[-1] +
+                np.sqrt(self.sigma_sq_) * rng.randn(n_nodes, n_features))
+            delta_new = (self.delta_[:, -1, :] +
+                np.sqrt(self.sigma_sq_delta_) *
+                    rng.randn(n_layers, n_nodes))
+
+            probas += (calculate_single_proba(X_new, self.lambda_, delta_new)
+                / n_samples)
+
+        return probas

@@ -8,7 +8,7 @@ from sklearn.utils import check_random_state
 
 
 __all__ = ['simple_dynamic_multilayer_network', 'simple_dynamic_network',
-           'dynamic_multilayer_network']
+           'dynamic_multilayer_network', 'correlated_dynamic_multilayer_network']
 
 
 def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
@@ -121,7 +121,7 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
     if include_delta:
         for k in range(n_layers):
-            delta[k, 0] = -3 + rng.uniform(-4, 4, size=n_nodes)
+            delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (
                     delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
@@ -131,6 +131,77 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
         X, lmbda, delta, random_state=rng)
 
     return Y, X, lmbda, delta, probas, dists
+
+
+def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
+                               center=1, n_features=2, tau=2, rho=0.5, rho_t=0.5, sigma=0.01,
+                               include_delta=True,
+                               random_state=42):
+    rng = check_random_state(random_state)
+
+    # construct latent features
+    n_features = n_features if n_features is not None else 0
+
+    if n_features > 0:
+        X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
+
+        if isinstance(tau, np.ndarray):
+            tau = np.diag(tau)
+        else:
+            tau = tau * np.eye(n_features)
+
+        if n_features == 2:
+            cor = np.array([[1.0, rho],
+                            [rho, 1.0]])
+            Sigma = tau @ cor @ tau
+        else:
+            Sigma = tau ** 2
+
+        z = rng.choice([0, 1], size=n_nodes)
+        c = np.zeros(n_features)
+        c[0] = center
+        mu = np.array([c, -c])
+        X[0] = rng.multivariate_normal(mean=np.zeros(n_features), cov=Sigma, size=n_nodes)
+        X[0] += mu[z]
+        X[0] -= np.mean(X[0], axis=0)
+
+        cov = (sigma ** 2) * ((1 - rho_t) * np.eye(n_time_steps-1) + rho_t * np.ones(
+            (n_time_steps-1, n_time_steps-1)))
+        errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=
+                (n_nodes, n_features))
+        for t in range(1, n_time_steps):
+            X[t] = X[t-1] + errors[..., t-1]
+            X[t] -= np.mean(X[t], axis=0)
+
+        # sample assortativity parameters from a U(-2, 2)
+        lmbda = np.zeros((n_layers, n_features))
+        lmbda[0] = rng.choice([-1, 1], size=n_features)
+        lmbda[1:] = rng.uniform(
+            -1, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+    else:
+        X = None
+        lmbda = None
+
+
+    # sample degree effects from a U(-2, 0)  # average is -1
+    delta = np.zeros((n_layers, n_time_steps, n_nodes))
+    if include_delta:
+        for k in range(n_layers):
+            delta[k, 0] = rng.uniform(-2, 0, size=n_nodes)
+            cov = (sigma ** 2) * ((1 - rho_t) * np.eye(n_time_steps-1) + rho_t * np.ones(
+                (n_time_steps-1, n_time_steps-1)))
+            errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=n_nodes)
+            for t in range(1, n_time_steps):
+                delta[k, t] = (
+                    delta[k, t-1] + errors[..., t-1])
+    else:
+        delta += -2
+
+    # construct the network
+    Y, probas, dists = multilayer_network_from_dynamic_latent_space(
+        X, lmbda, delta, random_state=rng)
+
+    return Y, X, lmbda, delta, probas, dists, z
 
 
 def network_from_dynamic_latent_space(X, delta, random_state=None):

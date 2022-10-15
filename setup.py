@@ -113,7 +113,11 @@ def cythonize_source(source, cython_cov=False):
 
 def make_extension(ext_name, macros=[]):
     ext_path = ext_name.replace('.', os.path.sep) + '.c'
-    mod_name = '.'.join(ext_name.split('.')[-2:])
+    mod_name = ext_name.split('.')
+    idx = mod_name.index('multidynet') + 1
+    mod_name = '.'.join(mod_name[idx:])
+    #mod_name = '.'.join(ext_name.split('.')[-2:])
+    print(mod_name)
     include_dirs = [numpy.get_include(), "."]
     if get_include():
         include_dirs = [get_include] + include_dirs
@@ -121,8 +125,7 @@ def make_extension(ext_name, macros=[]):
         mod_name,
         sources=[ext_path] + get_sources(),
         include_dirs=include_dirs,
-        extra_compile_args=["-O3", "-Wall", "-fPIC"],#, "-fopenmp"],
-        #extra_link_args=["-fopenmp"],
+        extra_compile_args=["-O3", "-Wall", "-fPIC"],
         define_macros=macros)
 
 

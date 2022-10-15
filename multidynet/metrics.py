@@ -2,6 +2,7 @@ import itertools
 
 import numpy as np
 
+from scipy.stats import pearsonr
 from scipy.special import logit
 from sklearn.metrics import roc_auc_score
 
@@ -43,12 +44,59 @@ def calculate_auc(Y_true, Y_pred, test_indices=None):
             if test_indices is None:
                 subset = y_true_vec != -1.0
             else:
-                subset = test_indices[k, t]
+                subset = test_indices[k][t]
 
             y_true.extend(y_true_vec[subset])
             y_pred.extend(y_pred_vec[subset])
 
     return roc_auc_score(y_true, y_pred)
+
+
+def calculate_correlation_single(Y_true, Y_pred, test_indices=None):
+    n_time_steps, n_nodes, _ = Y_true.shape
+    indices = np.tril_indices_from(Y_true[0], k=-1)
+
+    y_true = []
+    y_pred = []
+    for t in range(n_time_steps):
+        y_true_vec = Y_true[t][indices]
+        y_pred_vec = Y_pred[t][indices]
+
+        if test_indices is None:
+            subset = y_true_vec != -1.0
+        else:
+            subset = test_indices[t]
+        y_true.extend(y_true_vec[subset])
+        y_pred.extend(y_pred_vec[subset])
+
+    return pearsonr(y_true, y_pred)[0]
+
+
+def calculate_correlation(Y_true, Y_pred, test_indices=None):
+    if Y_true.ndim == 3:
+        return calculate_correlation_single(
+                Y_true, Y_pred, test_indices=test_indices)
+
+    n_layers, n_time_steps, n_nodes, _ = Y_true.shape
+    indices = np.tril_indices_from(Y_true[0, 0], k=-1)
+
+    y_true = []
+    y_pred = []
+    for k in range(n_layers):
+        for t in range(n_time_steps):
+            y_true_vec = Y_true[k, t][indices]
+            y_pred_vec = Y_pred[k, t][indices]
+
+            if test_indices is None:
+                subset = y_true_vec != -1.0
+            else:
+                subset = test_indices[k][t]
+
+            y_true.extend(y_true_vec[subset])
+            y_pred.extend(y_pred_vec[subset])
+
+    return pearsonr(y_true, y_pred)[0]
+
 
 
 def calculate_eta(X, lmbda, delta):

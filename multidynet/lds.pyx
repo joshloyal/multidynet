@@ -53,7 +53,7 @@ def calculate_natural_parameters(const double[:, :, :, ::1] Y,
 
 def kalman_filter(np.ndarray[double, ndim=2, mode='c'] A,
                   np.ndarray[double, ndim=3, mode='c'] B,
-                  double tau_prec,
+                  np.ndarray[double, ndim=2, mode='c'] X0_prec,
                   double sigma_prec):
     cdef size_t t
     cdef size_t n_time_steps = A.shape[0]
@@ -68,13 +68,11 @@ def kalman_filter(np.ndarray[double, ndim=2, mode='c'] A,
         (n_time_steps, n_features, n_features))
     cdef np.ndarray[double, ndim=3, mode='c'] sigma_star = np.zeros(
         (n_time_steps - 1, n_features, n_features))
-    cdef np.ndarray[double, ndim=2, mode='c'] F_init_inv = (
-        tau_prec * np.eye(n_features))
     cdef np.ndarray[double, ndim=2, mode='c'] F_inv = (
         sigma_prec * np.eye(n_features))
 
     # t = 1
-    sigma_inv[0] = F_init_inv + B[0]
+    sigma_inv[0] = X0_prec + B[0]
     sigma[0] = np.linalg.pinv(sigma_inv[0])
     mu[0] = np.dot(sigma[0], A[0])
 
@@ -91,7 +89,7 @@ def kalman_filter(np.ndarray[double, ndim=2, mode='c'] A,
 
 def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
                     np.ndarray[double, ndim=3, mode='c'] B,
-                    double tau_prec,
+                    np.ndarray[double, ndim=2, mode='c'] X0_prec,
                     double sigma_prec):
     cdef size_t t
     cdef size_t n_time_steps = A.shape[0]
@@ -110,8 +108,6 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
         (n_time_steps, n_features, n_features))
     cdef np.ndarray[double, ndim=3, mode='c'] psi_star = np.zeros(
         (n_time_steps, n_features, n_features))
-    cdef np.ndarray[double, ndim=2, mode='c'] F_init_inv = (
-        tau_prec * np.eye(n_features))
     cdef np.ndarray[double, ndim=2, mode='c'] F_inv = (
         sigma_prec * np.eye(n_features))
     cdef np.ndarray[double, ndim=2, mode='c'] mean = np.zeros(
@@ -122,7 +118,7 @@ def kalman_smoother(np.ndarray[double, ndim=2, mode='c'] A,
         (n_time_steps - 1, n_features, n_features))
 
     # run the filter for the forward message variables
-    mu, sigma, sigma_inv, sigma_star = kalman_filter(A, B, tau_prec, sigma_prec)
+    mu, sigma, sigma_inv, sigma_star = kalman_filter(A, B, X0_prec, sigma_prec)
 
     # run the smoother
     mean[n_time_steps - 1] = mu[n_time_steps - 1]
@@ -155,7 +151,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
                             double[:, :, ::1] lmbda_sigma,
                             double[:, :, ::1] delta,
                             double[:, :, :, ::1] omega,
-                            double tau_prec,
+                            np.ndarray[double, ndim=2, mode='c'] X0_prec,
                             double sigma_prec):
     cdef size_t i
     cdef size_t n_nodes = X.shape[1]
@@ -167,7 +163,7 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
             Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
 
         X[:, i], X_sigma[:, i], X_cross_cov[:, i] = kalman_smoother(
-            A, B, tau_prec, sigma_prec)
+            A, B, X0_prec, sigma_prec)
 
 
 def update_latent_positions_MF(const double[:, :, :, ::1] Y,
@@ -178,7 +174,7 @@ def update_latent_positions_MF(const double[:, :, :, ::1] Y,
                                double[:, :, ::1] lmbda_sigma,
                                double[:, :, ::1] delta,
                                double[:, :, :, ::1] omega,
-                               double tau_prec,
+                               np.ndarray[double, ndim=2, mode='c'] X0_prec,
                                double sigma_prec):
     cdef size_t i, t
     cdef size_t n_time_steps = X.shape[0]
@@ -186,26 +182,33 @@ def update_latent_positions_MF(const double[:, :, :, ::1] Y,
     cdef size_t n_features = lmbda.shape[1]
     cdef np.ndarray[double, ndim=2, mode='c'] A
     cdef np.ndarray[double, ndim=3, mode='c'] B
-    cdef np.ndarray[double, ndim=2, mode='c'] tau_precision = (
-        tau_prec * np.eye(n_features))
     cdef np.ndarray[double, ndim=2, mode='c'] sigma_precision = (
         sigma_prec * np.eye(n_features))
+    cdef np.ndarray[double, ndim=2, mode='c'] init_prec = (
+            X0_prec + sigma_precision)
+    #cdef np.ndarray[double, ndim=2, mode='c'] init_cov = np.linalg.pinv(
+    #        init_prec)
 
     for i in range(n_nodes):
         A, B = calculate_natural_parameters(
             Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
 
         # t = 1
-        X_sigma[0, i] = np.linalg.pinv(B[0] + 2 * tau_precision)
-        X[0, i] = np.dot(X_sigma[0, i], A[0])
+        X_sigma[0, i] = np.linalg.pinv(B[0] + init_prec + sigma_precision)
+
+        if n_time_steps > 1:
+            X[0, i] = np.dot(X_sigma[0, i],
+                    A[0] + sigma_precision @ X[1, i])
+        else:
+            X[0, i] = np.dot(X_sigma[0, i], A[0])
 
         # 1 < t < T
         for t in range(1, n_time_steps):
-            X_sigma[t, i] = np.linalg.pinv(
-                    B[t] + 2 * sigma_precision)
 
             if t == (n_time_steps - 1):
+                X_sigma[t, i] = np.linalg.pinv(B[t] + sigma_precision)
                 X[t, i] = X_sigma[t, i] @ (A[t] + sigma_precision @ X[t-1, i])
             else:
+                X_sigma[t, i] = np.linalg.pinv(B[t] + 2 * sigma_precision)
                 X[t, i] = np.dot(X_sigma[t, i],
                         A[t] + sigma_precision @ (X[t-1, i] + X[t+1, i]))
