@@ -232,6 +232,10 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     b = np.full(n_features, 0.5)
     X0_cov_prior_df = n_features + 2
     X0_cov_prior_scale = np.eye(n_features)
+
+    if model.callback_ is not None:
+        model.callback_.tick()
+
     for n_iter in tqdm(range(max_iter), disable=not verbose):
         prev_criteria = criteria
 
@@ -327,21 +331,22 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         model.criteria_.append(criteria)
 
         # check convergence
-        change = criteria - prev_criteria
-        if stopping_criteria == 'auc':
-            if abs(change) < tol and criteria > 0.55:
-                n_nochange += 1
-                if n_nochange > 4:
+        if stopping_criteria is not None:
+            change = criteria - prev_criteria
+            if stopping_criteria == 'auc':
+                if abs(change) < tol and criteria > 0.55:
+                    n_nochange += 1
+                    if n_nochange > 4:
+                        model.converged_ = True
+                        model.logp_ = np.asarray(model.logp_)
+                        break
+                else:
+                    n_nochange = 0
+            else:
+                if abs(change) < tol:
                     model.converged_ = True
                     model.logp_ = np.asarray(model.logp_)
                     break
-            else:
-                n_nochange = 0
-        else:
-            if abs(change) < tol:
-                model.converged_ = True
-                model.logp_ = np.asarray(model.logp_)
-                break
 
     return model
 

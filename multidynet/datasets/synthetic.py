@@ -142,6 +142,11 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
     # construct latent features
     n_features = n_features if n_features is not None else 0
 
+    # error correlation structure
+    #cov = (sigma ** 2) * ((1 - rho_t) * np.eye(n_time_steps-1) + rho_t * np.ones(
+    #    (n_time_steps-1, n_time_steps-1)))
+    ts = np.arange(n_time_steps - 1).reshape(-1, 1)
+    cov = (sigma ** 2) * (rho_t ** np.abs(ts - ts.T))
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
 
@@ -165,8 +170,6 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
         X[0] += mu[z]
         X[0] -= np.mean(X[0], axis=0)
 
-        cov = (sigma ** 2) * ((1 - rho_t) * np.eye(n_time_steps-1) + rho_t * np.ones(
-            (n_time_steps-1, n_time_steps-1)))
         errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=
                 (n_nodes, n_features))
         for t in range(1, n_time_steps):
@@ -188,8 +191,6 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
     if include_delta:
         for k in range(n_layers):
             delta[k, 0] = rng.uniform(-2, 0, size=n_nodes)
-            cov = (sigma ** 2) * ((1 - rho_t) * np.eye(n_time_steps-1) + rho_t * np.ones(
-                (n_time_steps-1, n_time_steps-1)))
             errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (

@@ -166,6 +166,47 @@ def update_latent_positions(const double[:, :, :, ::1] Y,
             A, B, X0_prec, sigma_prec)
 
 
+def calculate_natural_parameters_MF(const double[:, :, :, ::1] Y,
+                                    double[:, :, ::1] X,
+                                    double[:, :, :, ::1] X_sigma,
+                                    double[:, ::1] lmbda,
+                                    double[:, :, ::1] lmbda_sigma,
+                                    double[:, :, ::1] delta,
+                                    double[:, :, :, ::1] omega,
+                                    int i,
+                                    int t):
+    cdef size_t k, j, p, q
+    cdef size_t n_layers = Y.shape[0]
+    cdef size_t n_time_steps = Y.shape[1]
+    cdef size_t n_nodes = Y.shape[2]
+    cdef size_t n_features = lmbda.shape[1]
+
+    cdef double[:] eta1 = np.zeros(
+        n_features, dtype=np.float64)
+    cdef double[:, ::1] eta2 = np.zeros(
+        (n_features, n_features), dtype=np.float64)
+
+    for k in range(n_layers):
+        for j in range(n_nodes):
+            if j != i and Y[k, t, i, j] != -1.0:
+                for p in range(n_features):
+                    eta1[p] += (
+                        lmbda[k, p] * X[t, j, p] * (
+                            Y[k, t, i, j] - 0.5 -
+                                omega[k, t, i, j] * (
+                                     delta[k, t, i] + delta[k, t, j])))
+
+                    for q in range(p + 1):
+                        eta2[p, q] += omega[k, t, i, j] * (
+                            (lmbda_sigma[k, p, q] +
+                                lmbda[k, p] * lmbda[k, q]) *
+                            (X_sigma[t, j, p, q] +
+                                X[t, j, p] * X[t, j, q]))
+                        eta2[q, p] = eta2[p, q]
+
+    return np.asarray(eta1), np.asarray(eta2)
+
+
 def update_latent_positions_MF(const double[:, :, :, ::1] Y,
                                np.ndarray[double, ndim=3, mode='c'] X,
                                np.ndarray[double, ndim=4, mode='c'] X_sigma,
@@ -180,35 +221,30 @@ def update_latent_positions_MF(const double[:, :, :, ::1] Y,
     cdef size_t n_time_steps = X.shape[0]
     cdef size_t n_nodes = X.shape[1]
     cdef size_t n_features = lmbda.shape[1]
-    cdef np.ndarray[double, ndim=2, mode='c'] A
-    cdef np.ndarray[double, ndim=3, mode='c'] B
+    cdef np.ndarray[double, ndim=1, mode='c'] A
+    cdef np.ndarray[double, ndim=2, mode='c'] B
     cdef np.ndarray[double, ndim=2, mode='c'] sigma_precision = (
         sigma_prec * np.eye(n_features))
     cdef np.ndarray[double, ndim=2, mode='c'] init_prec = (
             X0_prec + sigma_precision)
-    #cdef np.ndarray[double, ndim=2, mode='c'] init_cov = np.linalg.pinv(
-    #        init_prec)
 
-    for i in range(n_nodes):
-        A, B = calculate_natural_parameters(
-            Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i)
+    for t in range(n_time_steps):
+        for i in range(n_nodes):
+            A, B = calculate_natural_parameters_MF(
+                Y, X, X_sigma, lmbda, lmbda_sigma, delta, omega, i, t)
 
-        # t = 1
-        X_sigma[0, i] = np.linalg.pinv(B[0] + init_prec + sigma_precision)
-
-        if n_time_steps > 1:
-            X[0, i] = np.dot(X_sigma[0, i],
-                    A[0] + sigma_precision @ X[1, i])
-        else:
-            X[0, i] = np.dot(X_sigma[0, i], A[0])
-
-        # 1 < t < T
-        for t in range(1, n_time_steps):
-
-            if t == (n_time_steps - 1):
-                X_sigma[t, i] = np.linalg.pinv(B[t] + sigma_precision)
-                X[t, i] = X_sigma[t, i] @ (A[t] + sigma_precision @ X[t-1, i])
+            # t = 1
+            if t == 0:
+                X_sigma[0, i] = np.linalg.pinv(B + init_prec + sigma_precision)
+                if n_time_steps > 1:
+                    X[0, i] = np.dot(X_sigma[0, i],
+                            A + sigma_precision @ X[1, i])
+                else:
+                    X[0, i] = np.dot(X_sigma[0, i], A)
+            elif t == (n_time_steps - 1):
+                X_sigma[t, i] = np.linalg.pinv(B + sigma_precision)
+                X[t, i] = X_sigma[t, i] @ (A + sigma_precision @ X[t-1, i])
             else:
-                X_sigma[t, i] = np.linalg.pinv(B[t] + 2 * sigma_precision)
+                X_sigma[t, i] = np.linalg.pinv(B + 2 * sigma_precision)
                 X[t, i] = np.dot(X_sigma[t, i],
-                        A[t] + sigma_precision @ (X[t-1, i] + X[t+1, i]))
+                        A + sigma_precision @ (X[t-1, i] + X[t+1, i]))

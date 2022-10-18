@@ -131,6 +131,29 @@ def update_deltas(const double[:, :, :, ::1] Y,
                 kalman_smoother(A, B, tau_prec, sigma_prec))
 
 
+def calculate_natural_parameters_MF(const double[:, :, :, ::1] Y,
+                                    double[:, :, :, ::1] XLX,
+                                    double[:, :, ::1] delta,
+                                    double[:, :, :, ::1] omega,
+                                    int k, int i, int t):
+    cdef size_t j
+    cdef size_t n_time_steps = Y.shape[1]
+    cdef size_t n_nodes = Y.shape[2]
+
+    cdef double eta1 = 0.
+    cdef double eta2 = 0.
+
+    for j in range(n_nodes):
+        if j != i and Y[k, t, i, j] != -1.0:
+            eta1 += (Y[k, t, i, j] - 0.5 -
+                        omega[k, t, i, j] * (
+                             delta[k, t, j] + XLX[k, t, i, j]))
+
+            eta2 += omega[k, t, i, j]
+
+    return eta1, eta2
+
+
 def update_deltas_MF(const double[:, :, :, ::1] Y,
                   np.ndarray[double, ndim=3, mode='c'] delta,
                   np.ndarray[double, ndim=3, mode='c'] delta_sigma,
@@ -144,32 +167,29 @@ def update_deltas_MF(const double[:, :, :, ::1] Y,
     cdef size_t n_layers = Y.shape[0]
     cdef size_t n_time_steps = Y.shape[1]
     cdef size_t n_nodes = Y.shape[2]
-    cdef np.ndarray[double, ndim=1, mode='c'] A
-    cdef np.ndarray[double, ndim=1, mode='c'] B
+    cdef double A
+    cdef double B
 
     for k in range(n_layers):
-        for i in range(n_nodes):
-            A, B = calculate_natural_parameters(
-                Y, XLX, delta, omega, k, i)
+        for t in range(n_time_steps):
+            for i in range(n_nodes):
+                A, B = calculate_natural_parameters_MF(
+                    Y, XLX, delta, omega, k, i, t)
 
-            # t = 1
-            delta_sigma[k, 0, i] = 1. / (B[0] + tau_prec + sigma_prec)
-            if n_time_steps > 1:
-                delta[k, 0, i] = delta_sigma[k, 0, i] * (
-                        A[0] + sigma_prec * delta[k, 1, i])
-            else:
-                delta[k, 0, i] = delta_sigma[k, 0, i] * A[0]
-
-            # 1 < t <= T
-            for t in range(1, n_time_steps):
-
-                # t = T
-                if t == (n_time_steps - 1):
-                    delta_sigma[k, t, i] = 1. / (B[t] + sigma_prec)
+                # t = 1
+                if t == 0:
+                    delta_sigma[k, 0, i] = 1. / (B + tau_prec + sigma_prec)
+                    if n_time_steps > 1:
+                        delta[k, 0, i] = delta_sigma[k, 0, i] * (
+                                A + sigma_prec * delta[k, 1, i])
+                    else:
+                        delta[k, 0, i] = delta_sigma[k, 0, i] * A
+                elif t == (n_time_steps - 1):
+                    delta_sigma[k, t, i] = 1. / (B + sigma_prec)
                     delta[k, t, i] = delta_sigma[k, t, i] * (
-                            A[t] + sigma_prec * delta[k, t-1, i])
+                            A + sigma_prec * delta[k, t-1, i])
                 else:
-                    delta_sigma[k, t, i] = 1. / (B[t] + 2 * sigma_prec)
+                    delta_sigma[k, t, i] = 1. / (B + 2 * sigma_prec)
                     delta[k, t, i] = delta_sigma[k, t, i] * (
-                            (A[t] + sigma_prec *
+                            (A + sigma_prec *
                                 (delta[k, t-1, i] + delta[k, t+1, i])))
