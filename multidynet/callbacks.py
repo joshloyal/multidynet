@@ -20,6 +20,9 @@ class TestMetricsCallback(object):
         probas = calculate_probabilities(
                 model.X_, model.lambda_, model.delta_)
         self.aucs_.append(calculate_auc(self.Y_, probas, self.test_indices_))
-        self.correlations_.append(calculate_correlation(
-            self.probas_, probas, self.test_indices_))
+
+        if self.probas_ is not None:
+            self.correlations_.append(calculate_correlation(
+                self.probas_, probas, self.test_indices_))
+
         self.times_.append(time.time() - self.start_time_)

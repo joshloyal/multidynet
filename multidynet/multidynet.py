@@ -4,7 +4,7 @@ import numpy as np
 import scipy.sparse as sp
 
 from joblib import Parallel, delayed
-from scipy.special import logit, gammainc, expit
+from scipy.special import logit, gammainc, expit, logsumexp
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils import check_array, check_random_state
 from sklearn.linear_model import LogisticRegression
@@ -17,7 +17,7 @@ from .deltas_lds import update_deltas, update_deltas_MF
 from .lmbdas import update_lambdas
 from .variances import update_tau_sq, update_sigma_sq, update_X0_precision, update_diag_tau_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
-from .log_likelihood import log_likelihood
+from .log_likelihood import log_likelihood, pointwise_log_likelihood
 from .metrics import calculate_auc
 from .sample_lds import sample_gssm
 from .model_selection import dynamic_multilayer_adjacency_to_vec
@@ -61,7 +61,10 @@ class ModelParameters(object):
 
 
 def sample_socialities(model, size=500, random_state=None):
-    deltas, Xs, lambdas = model.sample(size=size, random_state=random_state)
+    samples = model.sample(size=size, random_state=random_state)
+    deltas = samples['delta']
+    Xs = samples['X']
+    lambdas = samples['lambda']
 
     X_bar = np.mean(Xs, axis=2)
     Xs -= np.expand_dims(X_bar, axis=2)
@@ -299,8 +302,11 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                 model.X0_cov_df_, model.X0_cov_scale_ = update_X0_precision(
                     Y, model.X_, model.X_sigma_, X0_cov_prior_df,
                     X0_cov_prior_scale)
-            else:
+            elif init_covariance_type == 'diag':
                 model.a_tau_sq_, model.b_tau_sq_ = update_diag_tau_sq(
+                    Y, model.X_, model.X_sigma_, a, b)
+            else:
+                model.a_tau_sq_, model.b_tau_sq_ = update_tau_sq(
                     Y, model.X_, model.X_sigma_, a, b)
 
             # update step sizes of the latent space
@@ -465,7 +471,7 @@ class DynamicMultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
-                 init_covariance_type='diag',
+                 init_covariance_type='full',
                  c=2., d=2.,
                  a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
                  n_init=1, max_iter=1000, tol=1e-2,
@@ -490,7 +496,7 @@ class DynamicMultilayerNetworkLSM(object):
         self.n_jobs = n_jobs
         self.random_state = random_state
 
-    def fit(self, Y, callback=None):
+    def fit(self, Y, callback=None, n_samples=None):
         """Infer the approximate variational posterior of the eigenmodel
         for dynamic multilayer networks based on the observed network Y.
 
@@ -510,7 +516,7 @@ class DynamicMultilayerNetworkLSM(object):
             Fitted estimator.
         """
         Y = check_array(Y, order='C', dtype=np.float64,
-                        ensure_2d=False, allow_nd=True, copy=False)
+                        ensure_2d=False, allow_nd=True, copy=True)
 
         if Y.ndim == 3:
             raise ValueError(
@@ -578,19 +584,76 @@ class DynamicMultilayerNetworkLSM(object):
         if self.n_features_ > 0:
             self.p_aic_ += np.prod(self.X_.shape)
             self.p_aic_ += np.prod(self.lambda_.shape)
-        self.aic_ = -2 * self.loglik_ + 2 * self.p_aic_
 
         # BIC
         n_layers, n_time_steps, n_nodes = self.delta_.shape
         logn = (np.log(0.5 * n_nodes) + np.log(n_nodes - 1) +
             np.log(n_layers) + np.log(n_time_steps))
-        self.p_bic_ = logn * np.prod(self.delta_.shape)
+        self.p_bic_ = np.prod(self.delta_.shape)
         if self.n_features_ > 0:
-            self.p_bic_ += logn * np.prod(self.X_.shape)
-            self.p_bic_ += logn * np.prod(self.lambda_.shape)
-        self.bic_ = -2 * self.loglik_ + self.p_bic_
+            self.p_bic_ += np.prod(self.X_.shape)
+            self.p_bic_ += np.prod(self.lambda_.shape)
+
+
+        self.aic_ = -2 * self.loglik_ + 2 * self.p_aic_
+        self.bic_ = -2 * self.loglik_ + logn * self.p_bic_
+
+        if n_samples is not None:
+            self.samples_ = self.sample(
+                n_samples, random_state=self.random_state)
 
         return self
+
+    def waic(self, Y):
+        Y = check_array(Y, order='C', dtype=np.float64,
+                        ensure_2d=False, allow_nd=True, copy=True)
+        n_layers, n_time_steps, n_nodes, _ = Y.shape
+
+        if hasattr(self, 'samples_'):
+            n_samples = self.samples_['delta'].shape[0]
+            samples = self.samples_
+        else:
+            n_samples = 500
+            samples = self.sample(size=n_samples)
+
+        n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+        loglik = np.zeros((n_samples, n_layers, n_time_steps, n_dyads),
+            dtype=np.float64)
+        for i in range(n_samples):
+            loglik[i] = pointwise_log_likelihood(Y,
+                samples['X'][i], samples['lambda'][i],
+                samples['delta'][i], self.n_features_)
+        loglik = loglik.reshape(-1, np.prod(loglik.shape[1:]))
+
+        p_waic = loglik.var(axis=0).sum()
+        lppd = (logsumexp(loglik, axis=0) - np.log(n_samples)).sum()
+        waic = -2 * (lppd - p_waic)
+
+        return waic, p_waic
+
+    def dic(self, Y, n_samples=500):
+        Y = check_array(Y, order='C', dtype=np.float64,
+                        ensure_2d=False, allow_nd=True, copy=True)
+        n_layers, n_time_steps, n_nodes, _ = Y.shape
+
+        if hasattr(self, 'samples_'):
+            n_samples = self.samples_['delta'].shape[0]
+            samples = self.samples_
+        else:
+            n_samples = 500
+            samples = self.sample(size=n_samples)
+
+        loglik_bar = 0.
+        for i in range(n_samples):
+            loglik_bar += log_likelihood(Y,
+                samples['X'][i], samples['lambda'][i], samples['delta'][i],
+                self.n_features_) / n_samples
+
+        p_dic = -2 * (loglik_bar - self.loglik_)
+        dic =  -2 * self.loglik_ + 2 * p_dic
+
+        return dic, p_dic
+
 
     def _set_parameters(self, model):
         self.omega_ = model.omega_
@@ -722,7 +785,8 @@ class DynamicMultilayerNetworkLSM(object):
                     mean=self.lambda_[k], cov=self.lambda_sigma_[k],
                     size=size)
 
-        return deltas, Xs, lambdas
+        return {'delta': deltas, 'X': Xs, 'lambda': lambdas}
+
 
     def loglikelihood(self, Y, test_indices=None):
         y = dynamic_multilayer_adjacency_to_vec(Y)

@@ -134,7 +134,7 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
 
 
 def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
-                               center=1, n_features=2, tau=2, rho=0.5, rho_t=0.5, sigma=0.01,
+                               center=1, n_features=2, tau=2, rho=0., rho_t=0.5, sigma=0.01,
                                include_delta=True,
                                random_state=42):
     rng = check_random_state(random_state)

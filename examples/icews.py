@@ -16,6 +16,7 @@ model = DynamicMultilayerNetworkLSM(max_iter=5000, n_features=2,
                                     lambda_var_prior=10.,
                                     lambda_odds_prior=1,
                                     tol=1e-2, n_init=10,
+                                    init_covariance_type='full',
                                     n_jobs=-1, random_state=82590)
 model.fit(Y)
 

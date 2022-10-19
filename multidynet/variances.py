@@ -4,12 +4,12 @@ import numpy as np
 def update_tau_sq(Y, X, X_sigma, a, b):
     _, n_nodes, n_features = X.shape
 
-    a_tau_sq = a + n_nodes * n_features
-    b_tau_sq = (b +
+    a_tau_sq = a[0] + n_nodes * n_features
+    b_tau_sq = (b[0] +
         np.trace(X_sigma[0], axis1=1, axis2=2).sum() +
         (X[0] ** 2).sum())
 
-    return a_tau_sq, b_tau_sq
+    return np.repeat(a_tau_sq, n_features), np.repeat(b_tau_sq, n_features)
 
 
 def update_diag_tau_sq(Y, X, X_sigma, a, b):
