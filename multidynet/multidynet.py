@@ -617,12 +617,9 @@ class DynamicMultilayerNetworkLSM(object):
             samples = self.sample(size=n_samples)
 
         n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
-        loglik = np.zeros((n_samples, n_layers, n_time_steps, n_dyads),
-            dtype=np.float64)
-        for i in range(n_samples):
-            loglik[i] = pointwise_log_likelihood(Y,
-                samples['X'][i], samples['lambda'][i],
-                samples['delta'][i], self.n_features_)
+        loglik = pointwise_log_likelihood(
+            Y, samples['X'], samples['lambda'], samples['delta'],
+            self.n_features_)
         loglik = loglik.reshape(-1, np.prod(loglik.shape[1:]))
 
         p_waic = loglik.var(axis=0).sum()
