@@ -176,7 +176,7 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
             X[t] = X[t-1] + errors[..., t-1]
             X[t] -= np.mean(X[t], axis=0)
 
-        # sample assortativity parameters from a U(-2, 2)
+        # sample assortativity parameters from a U(-1, 2) (average is 0.5)
         lmbda = np.zeros((n_layers, n_features))
         lmbda[0] = rng.choice([-1, 1], size=n_features)
         lmbda[1:] = rng.uniform(

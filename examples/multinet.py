@@ -14,9 +14,9 @@ from multidynet.metrics import calculate_correlation, calculate_auc
 
 
 Y, X, lmbda, delta, probas, dists, z = correlated_dynamic_multilayer_network(
-    n_nodes=100, n_layers=4, n_time_steps=10, n_features=2,
-    center=0.75, tau=[0.25, 0.5], include_delta=True,
-    rho=0., rho_t=0.8, sigma=0.01,
+    n_nodes=100, n_layers=5, n_time_steps=10, n_features=2,
+    center=1, tau=[0.5, 0.75], include_delta=True,
+    rho=0., rho_t=0.4, sigma=0.01,
     random_state=1)
 print(lmbda)
 
@@ -35,7 +35,7 @@ probas_pred = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 for t in range(n_time_steps):
     print('t = {}'.format(t))
     model = MultilayerNetworkLSM(
-                max_iter=50, n_features=2,
+                max_iter=500, n_features=2,
                 init_covariance_type='full',
                 tol=1e-2, n_init=10,
                 stopping_criteria='loglik',
@@ -55,7 +55,7 @@ print(calculate_correlation(probas, probas_pred, test_indices=test_indices))
 print(calculate_auc(Y, probas_pred, test_indices=test_indices))
 
 model_joint = DynamicMultilayerNetworkLSM(
-        max_iter=50, n_features=2,
+        max_iter=500, n_features=2,
         init_covariance_type='full',
         approx_type='structured',
         tol=1e-2, n_init=10,

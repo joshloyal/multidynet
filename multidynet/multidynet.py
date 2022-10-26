@@ -7,8 +7,9 @@ from joblib import Parallel, delayed
 from scipy.special import logit, gammainc, expit, logsumexp
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils import check_array, check_random_state
+from scipy.optimize import linear_sum_assignment
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.metrics import log_loss, f1_score
 from tqdm import tqdm
 
 from .omega import update_omega
@@ -18,7 +19,7 @@ from .lmbdas import update_lambdas
 from .variances import update_tau_sq, update_sigma_sq, update_X0_precision, update_diag_tau_sq
 from .variances import update_tau_sq_delta, update_sigma_sq_delta
 from .log_likelihood import log_likelihood, pointwise_log_likelihood
-from .metrics import calculate_auc
+from .metrics import calculate_auc, calculate_metric
 from .sample_lds import sample_gssm
 from .model_selection import dynamic_multilayer_adjacency_to_vec
 
@@ -58,6 +59,22 @@ class ModelParameters(object):
         self.logp_ = []
         self.criteria_ = []
         self.callback_ = callback
+
+
+def find_permutation(U, U_ref):
+    _, n_features = U.shape
+    C = U_ref.T @ U
+    perm = linear_sum_assignment(np.maximum(C, -C), maximize=True)[1]
+    sign = np.sign(C[np.arange(n_features), perm])
+    return sign * U[:, perm]
+
+
+def smooth_positions(U):
+    n_time_steps, _, _ = U.shape
+    for t in range(1, n_time_steps):
+        U[t] = find_permutation(U[t], U[t-1])
+
+    return U
 
 
 def sample_socialities(model, size=500, random_state=None):
@@ -556,6 +573,9 @@ class DynamicMultilayerNetworkLSM(object):
 
         self._set_parameters(best_model)
 
+        # save all callbacks
+        self._callbacks = [models[i].callback_ for i in range(len(models))]
+
         # calculate dyad-probabilities
         self.probas_ = calculate_probabilities(
             self.X_, self.lambda_, self.delta_)
@@ -658,6 +678,9 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_ = model.X_
         self.X_sigma_ = model.X_sigma_
         self.X_cross_cov_ = model.X_cross_cov_
+
+        # match signed-permutations across time
+        self.X_ = smooth_positions(self.X_)
 
         # transform to identifiable parameterization
         if self.X_ is not None:

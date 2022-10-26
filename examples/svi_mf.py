@@ -17,10 +17,10 @@ from sklearn.metrics import roc_auc_score
 sigma = 0.05
 
 Y, X, lmbda, delta, probas, dists, z = correlated_dynamic_multilayer_network(
-    n_nodes=100, n_layers=4, n_time_steps=10, n_features=2,
-    tau=np.array([0.5, 0.75]),
-    rho=0., rho_t=0.8, sigma=sigma,
-    random_state=3)
+    n_nodes=100, n_layers=5, n_time_steps=20,
+    n_features=2, tau=np.array([0.5, 0.75]),
+    center=1, rho_t=0.4, sigma=0.05,
+    random_state=83529)
 
 n_layers, n_time_steps, n_nodes, _ = Y.shape
 n_dyads = 0.5 * n_layers * n_time_steps * n_nodes * (n_nodes - 1)
@@ -29,17 +29,17 @@ print(Y.mean(axis=(2, 3)))
 
 Y_train, test_indices = train_test_split(Y, test_size=0.2, random_state=23)
 
-#model_mf = DynamicMultilayerNetworkLSM(
-#                max_iter=50, n_features=2,
-#                init_covariance_type='spherical',
-#                approx_type='mean_field',
-#                tol=1e-2, n_init=10,
-#                stopping_criteria=None,
-#                n_jobs=-1,
-#                random_state=123)
-#
-#callback = TestMetricsCallback(Y=Y, probas=probas, test_indices=test_indices)
-#model_mf.fit(Y_train, callback=callback)
+model_mf = DynamicMultilayerNetworkLSM(
+                max_iter=50, n_features=2,
+                init_covariance_type='full',
+                approx_type='mean_field',
+                tol=1e-2, n_init=10,
+                stopping_criteria=None,
+                n_jobs=-1,
+                random_state=123)
+
+callback = TestMetricsCallback(Y=Y, probas=probas, test_indices=test_indices)
+model_mf.fit(Y_train, callback=callback)
 #print('MF Bias(sigma_sq): ', np.abs(model_mf.sigma_sq_ - sigma**2))
 #
 ## forecast accuracy
@@ -55,7 +55,11 @@ Y_train, test_indices = train_test_split(Y, test_size=0.2, random_state=23)
 #print('forecast AUC:', roc_auc_score(y_true, y_pred))
 #print('forecast correlation:', pearsonr(y_true_probas, y_pred)[0])
 #
-#plt.plot(model_mf.callback_.times_, model_mf.callback_.correlations_, label='mean_field')
+plt.plot(model_mf.callback_.times_, model_mf.callback_.correlations_,
+         linewidth=2, linestyle='dashed', label='mean_field')
+for i in range(10):
+    plt.plot(model_mf._callbacks[i].times_, model_mf._callbacks[i].correlations_,
+             alpha=0.25, c='black', linestyle='dashed')
 
 model_svi = DynamicMultilayerNetworkLSM(
                 max_iter=50, n_features=2,
@@ -70,13 +74,24 @@ callback = TestMetricsCallback(Y=Y, probas=probas, test_indices=test_indices)
 model_svi.fit(Y_train, callback=callback)
 #print('SVI Bias(sigma_sq): ', np.abs(model_svi.sigma_sq_ - sigma**2))
 #
-#plt.plot(model_svi.callback_.times_, model_svi.callback_.correlations_, label='structured')
+plt.plot(model_svi.callback_.times_, model_svi.callback_.correlations_, linewidth=2, label='structured')
+for i in range(10):
+    plt.plot(model_svi._callbacks[i].times_, model_svi._callbacks[i].correlations_,
+             alpha=0.25, c='black')
+
 #
 #plt.legend()
-#plt.xlabel('Wallclock Time [s]')
-#plt.ylabel('Pearson Correlation')
-#plt.show()
-#
+plt.xlabel('Wallclock Time [s]')
+plt.ylabel('Pearson Correlation')
+plt.show()
+
+
+plt.plot(model_mf.callback_.correlations_, label='Structured VI')
+plt.plot(model_svi.callback_.correlations_, label='Mean Field')
+plt.xlabel('# of Iterations')
+plt.ylabel('Pearson Correlation')
+plt.show()
+
 ## forecast accuracy
 #y_true = []
 #y_true_probas = []
