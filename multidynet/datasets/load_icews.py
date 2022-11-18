@@ -17,9 +17,12 @@ def load_icews(dataset='small', country_names='full', year_range=None):
     Y = joblib.load(open(file_name, 'rb'))
 
     if country_names == 'full':
-        countries = np.loadtxt(
-            join(file_path, dir_name, 'numpy_data', 'icews_countries.txt'),
-            delimiter='\n', dtype=np.unicode)
+        #countries = np.loadtxt(
+        #    join(file_path, dir_name, 'numpy_data', 'icews_countries.txt'),
+        #    delimiter='\n', dtype=np.unicode)
+        countries = pd.read_csv(
+            join(file_path, dir_name, 'numpy_data', 'icews_countries.csv')).values.ravel()
+
     else:
         countries = np.loadtxt(
             join(file_path, dir_name, 'numpy_data', 'icews_countries_iso.txt'),
