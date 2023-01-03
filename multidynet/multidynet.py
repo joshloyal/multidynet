@@ -180,7 +180,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
             (n_layers, n_features, n_features))
 
         # reference layer lambda initialized to one
-        lmbda[0] = 1.0
+        #lmbda[0] = 1.0
+        lmbda[0] = rng.choice([-1, 1], n_features)
         lmbda_sigma[0] = (
             (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
         lmbda_logit_prior = np.log(lambda_odds_prior)

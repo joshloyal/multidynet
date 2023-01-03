@@ -110,8 +110,11 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
         # sample assortativity parameters from a U(-2, 2)
         lmbda = np.zeros((n_layers, n_features))
         lmbda[0] = rng.choice([-1, 1], size=n_features)
-        lmbda[1:] = rng.uniform(
-            -2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+        z = rng.choice([-1, 1], size=((n_layers - 1) * n_features)).reshape(n_layers - 1, n_features)
+        lmbda[1:] = z + 0.25 * rng.randn(n_layers - 1, n_features)
+        #lmbda[1:] = rng.uniform(
+        #    #-2, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+        #    1, 1.5, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
     else:
         X = None
         lmbda = None
@@ -121,7 +124,7 @@ def dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=10,
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
     if include_delta:
         for k in range(n_layers):
-            delta[k, 0] = rng.uniform(-4, 4, size=n_nodes)
+            delta[k, 0] = rng.uniform(-2, -1, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (
                     delta[k, t-1] + np.sqrt(sigma_sq_delta) * rng.randn(n_nodes))
