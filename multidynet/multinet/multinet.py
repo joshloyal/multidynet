@@ -7,7 +7,7 @@ from joblib import Parallel, delayed
 from scipy.special import logit, gammainc, expit
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils import check_array, check_random_state
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LinearRegression
 from sklearn.metrics import log_loss
 from tqdm import tqdm
 
@@ -84,8 +84,93 @@ def initialize_node_effects(Y):
     return delta
 
 
+def initialize_node_effects_cont(Y):
+    n_nodes = Y.shape[0]
+
+    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+    dyads = np.tril_indices_from(Y, k=-1)
+    y_vec = Y[dyads]
+
+    # construct dummy node indicators
+    cols = np.r_[dyads[0], dyads[1]]
+    rows = np.r_[np.arange(n_dyads), np.arange(n_dyads)]
+    X = sp.coo_matrix((np.ones(2 * n_dyads), (rows, cols)),
+                       shape=(n_dyads, n_nodes)).tocsr()
+
+    reg = LinearRegression(fit_intercept=False)
+    reg.fit(X, y_vec)
+
+    return reg.coef_
+
+
+def initialize_lambda(Y, U):
+    n_nodes, n_features = U.shape
+    n_dyads = int(0.5 * n_nodes * (n_nodes - 1))
+    dyads = np.tril_indices_from(Y, k=-1)
+    
+    y_vec = Y[dyads] 
+    X = np.zeros((n_dyads, n_features))
+    for p in range(n_features):
+        u = U[:, p].reshape(-1, 1)
+        X[:, p] = (u @ u.T)[dyads]
+         
+    reg = LinearRegression(fit_intercept=False)
+    reg.fit(X, y_vec)
+
+    return reg.coef_ 
+
+
+def initialize_svt(Y, n_features, eps=1e-3):
+    n_layers, n_nodes, _ = Y.shape
+
+    delta_init = np.zeros((n_layers, n_nodes))
+    resid = np.zeros((n_layers, n_nodes, n_nodes))
+    lmbda_init = np.zeros((n_layers, n_features))
+    V = None
+    for k in range(n_layers):
+        A = Y[k].copy()
+        A[A == -1] = 0
+        dyads = np.tril_indices_from(A, k=-1)
+        tau = np.sqrt(n_nodes * np.mean(A[dyads]))
+        u,s,v = np.linalg.svd(A)
+        ids = s >= tau
+        P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], eps, 1-eps)
+        Theta = logit(0.5 * (P_tilde + P_tilde.T))
+
+        delta_init[k] = initialize_node_effects_cont(Theta)
+
+        if n_features > 0:
+            d = delta_init[k].reshape(-1, 1)
+            resid[k] = Theta - d - d.T
+            eigvals, eigvecs = np.linalg.eigh(resid[k])
+
+            ids = np.argsort(np.abs(eigvals))[::-1]
+            eigvecs = eigvecs[:, ids][:, :n_features] 
+            if V is None:
+                V = eigvecs
+            else:
+                V = np.hstack((V, eigvecs)) 
+    
+    if n_features > 0:
+        X = np.zeros((n_nodes, n_features))
+        u, s, v = np.linalg.svd(V)
+        X = u[:, :n_features]
+
+        for k in range(n_layers):
+            lmbda_init[k] = initialize_lambda(resid[k], X)
+        
+        lambda0 = np.abs(lmbda_init[0])
+        lmbda_init = lmbda_init / lambda0 
+        X = np.sqrt(lambda0) * X
+    else:
+        X = None
+        lmbda_init = None
+    
+    return X, lmbda_init, delta_init
+
+
 def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                          init_covariance_type,
+                          init_covariance_type, init_params_type,
                           callback, random_state):
     rng = check_random_state(random_state)
 
@@ -97,8 +182,11 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # initialize latent space randomly and center to remove effect
     # social trajectory initialization
     if n_features > 0:
-        X = rng.randn(n_nodes, n_features)
-        X -= np.mean(X, axis=0)
+        if init_params_type == 'svt':
+            X, lmbda, delta = initialize_svt(Y, n_features)
+        else:
+            X = rng.randn(n_nodes, n_features)
+            X -= np.mean(X, axis=0)
 
         # initialize to marginal covariances
         sigma_init = np.eye(n_features)
@@ -106,16 +194,19 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
             sigma_init[None], reps=(n_nodes, 1, 1))
 
         # initialize to prior means
-        lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
+        if init_params_type != 'svt':
+            lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
+            lmbda[0] = rng.choice([-1, 1], 1)
+
         lmbda_sigma = lambda_var_prior * np.ones(
             (n_layers, n_features, n_features))
 
         # reference layer lambda initialized to one
-        lmbda[0] = 1.0
         lmbda_sigma[0] = (
             (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
         lmbda_logit_prior = np.log(lambda_odds_prior)
     else:
+        X, lmbda, delta = initialize_svt(Y, n_features)
         X = None
         X_sigma = None
         lmbda = None
@@ -123,7 +214,9 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
         lmbda_logit_prior = np.log(lambda_odds_prior)
 
     # initialize node-effects based on degree
-    delta = initialize_node_effects(Y)
+    if init_params_type != 'svt' and n_features > 0:
+        delta = initialize_node_effects(Y)
+
     delta_sigma = np.ones((n_layers, n_nodes))
 
     # initialize based on prior information
@@ -148,7 +241,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
 
 def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
-                  init_covariance_type,
+                  init_covariance_type, init_params_type,
                    max_iter, tol, random_state,
                   stopping_criteria='loglik',
                   callback=None, verbose=True):
@@ -164,7 +257,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # initialize parameters of the model
     model = initialize_parameters(
         Y, n_features, lambda_odds_prior, lambda_var_prior,
-        init_covariance_type,
+        init_covariance_type, init_params_type,
         callback, random_state)
 
     a = np.full(n_features, 1.5)  # 0.5 * (n_features + 2)
@@ -324,14 +417,15 @@ class MultilayerNetworkLSM(object):
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
                  lambda_var_prior=10,
-                 init_covariance_type='diag',
-                 n_init=1, max_iter=1000, tol=1e-2,
+                 init_covariance_type='full',
+                 init_type='svt', n_init=1, max_iter=1000, tol=1e-2,
                  stopping_criteria='loglik',
                  n_jobs=1, random_state=None):
         self.n_features = n_features
         self.lambda_odds_prior = lambda_odds_prior
         self.lambda_var_prior = lambda_var_prior
         self.init_covariance_type = init_covariance_type
+        self.init_type = init_type
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -346,6 +440,9 @@ class MultilayerNetworkLSM(object):
         self.n_features_ = self.n_features if self.n_features is not None else 0
 
         random_state = check_random_state(self.random_state)
+        
+        if self.init_type == 'svt':
+            self.n_init = 1
 
         # run the elbo optimization over different initializations
         seeds = random_state.randint(np.iinfo(np.int32).max, size=self.n_init)
@@ -353,6 +450,7 @@ class MultilayerNetworkLSM(object):
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features_, self.lambda_odds_prior,
                 self.lambda_var_prior, self.init_covariance_type,
+                self.init_type,
                 self.max_iter, self.tol, seed,
                 stopping_criteria=self.stopping_criteria,
                 callback=callback, verbose=verbose)
