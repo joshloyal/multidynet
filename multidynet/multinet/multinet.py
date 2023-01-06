@@ -352,9 +352,13 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                 n_nochange = 0
         else:
             if abs(change) < tol:
-                model.converged_ = True
-                model.logp_ = np.asarray(model.logp_)
-                break
+                n_nochange += 1
+                if n_nochange >= 2:
+                    model.converged_ = True
+                    model.logp_ = np.asarray(model.logp_)
+                    break
+            else:
+                n_nochange = 0
 
     return model
 

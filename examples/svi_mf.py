@@ -17,10 +17,10 @@ from sklearn.metrics import roc_auc_score
 sigma = 0.05
 
 Y, X, lmbda, delta, probas, dists, z = correlated_dynamic_multilayer_network(
-    n_nodes=100, n_layers=5, n_time_steps=20,
-    n_features=2, tau=np.array([0.5, 0.75]),
-    center=1, rho_t=0.4, sigma=0.05,
-    random_state=83529)
+    n_nodes=50, n_layers=5, n_time_steps=20,
+    n_features=2, tau=np.array([0.5, 0.25]),
+    center=0.5, rho_t=0.4, sigma=0.05,
+    random_state=1)
 
 n_layers, n_time_steps, n_nodes, _ = Y.shape
 n_dyads = 0.5 * n_layers * n_time_steps * n_nodes * (n_nodes - 1)
@@ -57,9 +57,9 @@ model_mf.fit(Y_train, callback=callback)
 #
 plt.plot(model_mf.callback_.times_, model_mf.callback_.correlations_,
          linewidth=2, linestyle='dashed', label='mean_field')
-for i in range(10):
-    plt.plot(model_mf._callbacks[i].times_, model_mf._callbacks[i].correlations_,
-             alpha=0.25, c='black', linestyle='dashed')
+#for i in range(10):
+#    plt.plot(model_mf._callbacks[i].times_, model_mf._callbacks[i].correlations_,
+#             alpha=0.25, c='black', linestyle='dashed')
 
 model_svi = DynamicMultilayerNetworkLSM(
                 max_iter=50, n_features=2,
@@ -75,9 +75,9 @@ model_svi.fit(Y_train, callback=callback)
 #print('SVI Bias(sigma_sq): ', np.abs(model_svi.sigma_sq_ - sigma**2))
 #
 plt.plot(model_svi.callback_.times_, model_svi.callback_.correlations_, linewidth=2, label='structured')
-for i in range(10):
-    plt.plot(model_svi._callbacks[i].times_, model_svi._callbacks[i].correlations_,
-             alpha=0.25, c='black')
+#for i in range(10):
+#    plt.plot(model_svi._callbacks[i].times_, model_svi._callbacks[i].correlations_,
+#             alpha=0.25, c='black')
 
 #
 #plt.legend()

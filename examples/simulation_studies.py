@@ -14,7 +14,7 @@ from multidynet.metrics import (
 def sim_single(seed, n_nodes=100, n_layers=10, n_time_steps=10):
     Y, X, lmbda, delta, probas, dists = dynamic_multilayer_network(
         n_nodes=n_nodes, n_layers=n_layers, n_time_steps=n_time_steps,
-        tau_sq=4.0, sigma_sq=0.05,
+        tau_sq=4.0, sigma_sq=(0.05 ** 2),
         random_state=seed)
 
     # 80% - 20% split
@@ -51,7 +51,7 @@ def sim_single(seed, n_nodes=100, n_layers=10, n_time_steps=10):
             'X_rel' : X_rel,
             'lambda_rel': lambda_rel,
             'delta_rel': delta_rel,
-            'tau_sq': model.tau_sq_,
+            #'tau_sq': model.tau_sq_,
             'sigma_sq': model.sigma_sq_,
             'converged': model.converged_
     }, index=[0])
@@ -69,20 +69,21 @@ def sim_single(seed, n_nodes=100, n_layers=10, n_time_steps=10):
 # NOTE: This is meant to be run in parallel on a computer cluster!
 n_reps = 30
 
-# simulation 1
-for n_nodes in [50, 100, 200, 500, 1000]:
-    for i in range(n_reps):
-        sim_single(seed=i, n_nodes=n_nodes, n_layers=5, n_time_steps=10)
-        print(i)
-
-
-# simulation 2
-for n_layers in [5, 10, 20]:
-    for i in range(n_reps):
-        sim_single(seed=i, n_nodes=100, n_layers=n_layers, n_time_steps=10)
-
-
-# simulation 3
-for n_time_steps in [10, 50, 100]:
-    for i in range(n_reps):
-        sim_single(seed=i, n_nodes=100, n_layers=5, n_time_steps=n_time_steps)
+sim_single(seed=0, n_nodes=100, n_layers=5, n_time_steps=10)
+## simulation 1
+#for n_nodes in [50, 100, 200, 500, 1000]:
+#    for i in range(n_reps):
+#        sim_single(seed=i, n_nodes=n_nodes, n_layers=5, n_time_steps=10)
+#        print(i)
+#
+#
+## simulation 2
+#for n_layers in [5, 10, 20]:
+#    for i in range(n_reps):
+#        sim_single(seed=i, n_nodes=100, n_layers=n_layers, n_time_steps=10)
+#
+#
+## simulation 3
+#for n_time_steps in [10, 50, 100]:
+#    for i in range(n_reps):
+#        sim_single(seed=i, n_nodes=100, n_layers=5, n_time_steps=n_time_steps)

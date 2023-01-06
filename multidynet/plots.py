@@ -805,12 +805,12 @@ def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
             ax.plot(np.arange(n_time_steps), stat_obs[k], 'o--', c='k')
         sns.boxplot(x='variable', y='value', data=pd.melt(data),
                     ax=ax, color='white')
-
+        
+        ax.set_xticks([i for i in range(0, n_time_steps, time_step)])
         ax.set_xticklabels(time_labels[::time_step], rotation=45, fontsize=12)
         plt.setp(ax.artists, edgecolor='black')
         plt.setp(ax.lines, color='black')
 
-        ax.set_xticks([i for i in range(0, n_time_steps, time_step)])
         ax.tick_params(axis='y', labelsize=16)
         ax.tick_params(axis='x', labelsize=16)
 
