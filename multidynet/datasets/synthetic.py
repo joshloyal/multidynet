@@ -171,19 +171,21 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
         mu = np.array([c, -c])
         X[0] = rng.multivariate_normal(mean=np.zeros(n_features), cov=Sigma, size=n_nodes)
         X[0] += mu[z]
-        X[0] -= np.mean(X[0], axis=0)
+        #X[0] -= np.mean(X[0], axis=0)
 
         errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=
                 (n_nodes, n_features))
         for t in range(1, n_time_steps):
             X[t] = X[t-1] + errors[..., t-1]
-            X[t] -= np.mean(X[t], axis=0)
+            #X[t] -= np.mean(X[t], axis=0)
 
         # sample assortativity parameters from a U(-1, 2) (average is 0.5)
         lmbda = np.zeros((n_layers, n_features))
         lmbda[0] = rng.choice([-1, 1], size=n_features)
-        lmbda[1:] = rng.uniform(
-            -1, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+        #lmbda[1:] = rng.uniform(
+        #    -1, 2, (n_layers - 1) * n_features).reshape(n_layers - 1, n_features)
+        z = rng.choice([-1, 1], size=((n_layers - 1) * n_features)).reshape(n_layers - 1, n_features)
+        lmbda[1:] = z + 0.25 * rng.randn(n_layers - 1, n_features)
     else:
         X = None
         lmbda = None
@@ -193,7 +195,7 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
     if include_delta:
         for k in range(n_layers):
-            delta[k, 0] = rng.uniform(-2, 0, size=n_nodes)
+            delta[k, 0] = rng.uniform(-2, -1, size=n_nodes)
             errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (
