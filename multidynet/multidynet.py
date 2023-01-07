@@ -281,7 +281,7 @@ def initialize_parameters(Y, n_features, init_params_type,
             lmbda = np.sqrt(2) * rng.randn(n_layers, n_features)
             lmbda[0] = rng.choice([-1, 1], n_features)
 
-        lmbda_sigma = lambda_var_prior * np.ones(
+        lmbda_sigma = np.ones(
             (n_layers, n_features, n_features))
         lmbda_sigma[0] = (
             (1 - lmbda[0, 0] ** 2) * np.eye(n_features))
