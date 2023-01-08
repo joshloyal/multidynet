@@ -23,6 +23,7 @@ from ..metrics import calculate_auc
 
 __all__ = ['MultilayerNetworkLSM']
 
+EPS = np.finfo('float64').epsneg
 
 class ModelParameters(object):
     def __init__(self, omega, X, X_sigma,
@@ -120,7 +121,7 @@ def initialize_lambda(Y, U):
     return reg.coef_ 
 
 
-def initialize_svt(Y, n_features, eps=1e-3):
+def initialize_svt(Y, n_features):
     n_layers, n_nodes, _ = Y.shape
 
     delta_init = np.zeros((n_layers, n_nodes))
@@ -134,7 +135,7 @@ def initialize_svt(Y, n_features, eps=1e-3):
         tau = np.sqrt(n_nodes * np.mean(A[dyads]))
         u,s,v = np.linalg.svd(A)
         ids = s >= tau
-        P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], eps, 1-eps)
+        P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
         Theta = logit(0.5 * (P_tilde + P_tilde.T))
 
         delta_init[k] = initialize_node_effects_cont(Theta)

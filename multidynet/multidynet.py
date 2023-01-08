@@ -27,6 +27,9 @@ from .model_selection import dynamic_multilayer_adjacency_to_vec
 __all__ = ['DynamicMultilayerNetworkLSM']
 
 
+EPS = np.finfo('float64').epsneg
+
+
 class ModelParameters(object):
     def __init__(self, omega, X, X_sigma, X_cross_cov,
                  lmbda, lmbda_sigma, lmbda_logit_prior,
@@ -178,7 +181,7 @@ def initialize_lambda(Y, U):
     return reg.coef_ 
 
 
-def initialize_svt(Y, n_features, eps=1e-3):
+def initialize_svt(Y, n_features):
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
     delta_init = np.zeros((n_layers, n_time_steps, n_nodes))
@@ -190,10 +193,11 @@ def initialize_svt(Y, n_features, eps=1e-3):
             A = Y[k, t].copy()
             A[A == -1] = 0
             dyads = np.tril_indices_from(A, k=-1)
+            #tau = np.sqrt(n_nodes) 
             tau = np.sqrt(n_nodes * np.mean(A[dyads]))
             u,s,v = np.linalg.svd(A)
             ids = s >= tau
-            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], eps, 1-eps)
+            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
 
             delta_init[k, t] = initialize_node_effects_cont(Theta)
@@ -219,10 +223,8 @@ def initialize_svt(Y, n_features, eps=1e-3):
 
         for k in range(n_layers):
             lmbda_init[k] = initialize_lambda(resid[k], X)
-        
         lambda0 = np.abs(lmbda_init[0])
         lmbda_init = lmbda_init / lambda0
-        
         for t in range(n_time_steps):
             X[t] = np.sqrt(lambda0) * X[t]
     else:
