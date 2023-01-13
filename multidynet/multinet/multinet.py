@@ -216,7 +216,8 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
     # initialize node-effects based on degree
     if init_params_type != 'svt' and n_features > 0:
-        delta = initialize_node_effects(Y)
+        #delta = initialize_node_effects(Y)
+        delta = rng.randn(n_layers, n_time_steps, n_nodes)
 
     delta_sigma = np.ones((n_layers, n_nodes))
 

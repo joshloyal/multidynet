@@ -5,6 +5,7 @@ import scipy.sparse as sp
 
 from joblib import Parallel, delayed
 from scipy.special import logit, gammainc, expit, logsumexp
+from scipy.linalg import orthogonal_procrustes
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils import check_array, check_random_state
 from scipy.optimize import linear_sum_assignment
@@ -78,6 +79,16 @@ def smooth_positions(U):
         U[t] = find_permutation(U[t], U[t-1])
 
     return U
+
+
+def smooth_positions_procrustes(U):
+    n_time_steps, _, _ = U.shape
+    for t in range(1, n_time_steps):
+        R, _ = orthogonal_procrustes(U[t], U[t-1])
+        U[t] = U[t] @ R
+
+    return U
+
 
 
 def sample_socialities(model, size=500, random_state=None):
@@ -193,15 +204,13 @@ def initialize_svt(Y, n_features):
             A = Y[k, t].copy()
             A[A == -1] = 0
             dyads = np.tril_indices_from(A, k=-1)
-            #tau = np.sqrt(n_nodes) 
             tau = np.sqrt(n_nodes * np.mean(A[dyads]))
-            u,s,v = np.linalg.svd(A)
+            u,s,v = np.linalg.svd(A, hermitian=True)
             ids = s >= tau
             P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
 
             delta_init[k, t] = initialize_node_effects_cont(Theta)
-
             if n_features > 0:
                 d = delta_init[k, t].reshape(-1, 1)
                 resid[k, t] = Theta - d - d.T
@@ -219,7 +228,7 @@ def initialize_svt(Y, n_features):
         for t in range(n_time_steps):
             u, s, v = np.linalg.svd(V[t])
             X[t] = u[:, :n_features]
-        X = smooth_positions(X)
+        X = smooth_positions_procrustes(X)
 
         for k in range(n_layers):
             lmbda_init[k] = initialize_lambda(resid[k], X)
@@ -298,7 +307,8 @@ def initialize_parameters(Y, n_features, init_params_type,
     
     if init_params_type != 'svt' and n_features > 0:
         #_, _, delta = initialize_svt(Y, 0)
-        delta = initialize_node_effects(Y)
+        #delta = initialize_node_effects(Y)
+        delta = rng.randn(n_layers, n_time_steps, n_nodes)
 
     delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
 
@@ -338,7 +348,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                   a_delta, b_delta, c_delta, d_delta,
                   approx_type, max_iter,  tol, random_state,
                   stopping_criteria='loglik',
-                  callback=None, verbose=True):
+                  callback=None, verbose=True, idx=0):
 
     n_layers, n_time_steps, n_nodes, _ = Y.shape
 
@@ -347,6 +357,9 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     #   auc: training AUC
     criteria = -np.infty
     n_nochange = 0
+
+    if init_params_type == 'both' and idx == 0:
+        init_params_type = 'svt'
 
     # initialize parameters of the model
     model = initialize_parameters(
@@ -670,8 +683,8 @@ class DynamicMultilayerNetworkLSM(object):
                 self.a_delta, self.b_delta, self.c_delta, self.d_delta,
                 self.approx_type, self.max_iter, self.tol, seed,
                 stopping_criteria=self.stopping_criteria,
-                callback=callback, verbose=verbose)
-            for seed in seeds)
+                callback=callback, verbose=verbose, idx=i)
+            for i, seed in enumerate(seeds))
 
         # choose model with the largest convergence criteria
         best_model = models[0]
