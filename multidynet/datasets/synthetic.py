@@ -150,6 +150,8 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
     #    (n_time_steps-1, n_time_steps-1)))
     ts = np.arange(n_time_steps - 1).reshape(-1, 1)
     cov = (sigma ** 2) * (rho_t ** np.abs(ts - ts.T))
+    #cov = (sigma ** 2) * rho_t * np.ones((n_time_steps - 1, n_time_steps - 1))
+    #cov[np.diag_indices_from(cov)] = sigma ** 2
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features), dtype=np.float64)
 
@@ -167,39 +169,48 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
 
         z = rng.choice([0, 1], size=n_nodes)
         c = np.zeros(n_features)
-        c[0] = center
+        c[:len(center)] = center
         mu = np.array([c, -c])
+        
+        #z = rng.choice([0, 1, 2, 3], size=n_nodes)
+        #c = np.zeros(n_features)
+        #c2 = c.copy()
+        #c[:2] = [center, center]
+        #c2[:2] = [center, -center]
+        #mu = np.array([c, -c, c2, -c2])
+        
         X[0] = rng.multivariate_normal(mean=np.zeros(n_features), cov=Sigma, size=n_nodes)
         X[0] += mu[z]
         X[0] -= np.mean(X[0], axis=0)
-
+        
         errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=
                 (n_nodes, n_features))
         for t in range(1, n_time_steps):
             X[t] = X[t-1] + errors[..., t-1]
-            #X[t] -= np.mean(X[t], axis=0)
+            X[t] -= np.mean(X[t], axis=0)
 
         # sample assortativity parameters 
         lmbda = np.zeros((n_layers, n_features))
         lmbda[0] = rng.choice([-1, 1], size=n_features)
         c = rng.choice([-1, 1], size=((n_layers - 1) * n_features)).reshape(n_layers - 1, n_features)
-        lmbda[1:] = c + 0.25 * rng.randn(n_layers - 1, n_features)
+        #lmbda[1:] = c + 0.5 * rng.randn(n_layers - 1, n_features)
+        lmbda[1:] = c + rng.uniform(-0.5, 0.5, size = (n_layers - 1, n_features))
     else:
         X = None
         lmbda = None
 
 
-    # sample degree effects from a U(-3, 0) for an average of -1.5
+    # sample degree effects from a U(-3, 0) for an average of -1.5 (-4, 1)
     delta = np.zeros((n_layers, n_time_steps, n_nodes))
     if include_delta:
         for k in range(n_layers):
-            delta[k, 0] = rng.uniform(-3, 0, size=n_nodes)
+            delta[k, 0] = rng.uniform(-4, 1, size=n_nodes)
             errors = rng.multivariate_normal(mean=np.zeros(n_time_steps-1), cov=cov, size=n_nodes)
             for t in range(1, n_time_steps):
                 delta[k, t] = (
                     delta[k, t-1] + errors[..., t-1])
     else:
-        delta += -2
+        delta += -1
 
     # construct the network
     Y, probas, dists = multilayer_network_from_dynamic_latent_space(
