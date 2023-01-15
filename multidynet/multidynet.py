@@ -497,7 +497,11 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                         break
                 else:
                     n_nochange = 0
+    
 
+    probas = calculate_probabilities(
+        model.X_, model.lambda_, model.delta_)
+    model.auc_ = calculate_auc(Y, probas)
     return model
 
 
@@ -690,11 +694,17 @@ class DynamicMultilayerNetworkLSM(object):
                 callback=callback, verbose=verbose, idx=i)
             for i, seed in enumerate(seeds))
 
-        # choose model with the largest convergence criteria
+        # choose model with the largest in-sample AUC #convergence criteria
+        #best_model = models[0]
+        #best_criteria = models[0].criteria_[-1]
+        #for i in range(1, len(models)):
+        #    if models[i].criteria_[-1] > best_criteria:
+        #        best_model = models[i]
+        
         best_model = models[0]
-        best_criteria = models[0].criteria_[-1]
+        best_criteria = models[0].auc_
         for i in range(1, len(models)):
-            if models[i].criteria_[-1] > best_criteria:
+            if models[i].auc_ > best_criteria:
                 best_model = models[i]
 
         if not best_model.converged_:
