@@ -701,11 +701,13 @@ class DynamicMultilayerNetworkLSM(object):
         #    if models[i].criteria_[-1] > best_criteria:
         #        best_model = models[i]
         
-        best_model = models[0]
-        best_criteria = models[0].auc_
-        for i in range(1, len(models)):
-            if models[i].auc_ > best_criteria:
-                best_model = models[i]
+        best_idx = np.argmax([model.auc_ for model in models])
+        best_model = models[best_idx]
+        #best_model = models[0]
+        #best_criteria = models[0].auc_
+        #for i in range(1, len(models)):
+        #    if models[i].auc_ > best_criteria:
+        #        best_model = models[i]
 
         if not best_model.converged_:
             warnings.warn('Best model did not converge. '
