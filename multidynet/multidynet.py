@@ -203,12 +203,16 @@ def initialize_svt(Y, n_features):
         for k in range(n_layers):
             A = Y[k, t].copy()
             A[A == -1] = 0
-            dyads = np.tril_indices_from(A, k=-1)
-            tau = np.sqrt(n_nodes * np.mean(A[dyads]))
+            #dyads = np.tril_indices_from(A, k=-1)
+            #tau = np.sqrt(n_nodes * np.mean(A[dyads]))
+            tau = np.sqrt(n_nodes * np.mean(A))
             u,s,v = np.linalg.svd(A, hermitian=True)
             ids = s >= tau
-            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
+            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], 1e-3, 0.8)  #, 1-EPS)
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
+
+            # diagonal is undefined (e.g., missing)
+            #Theta[np.diag_indices_from(Theta)] = 0.  
 
             delta_init[k, t] = initialize_node_effects_cont(Theta)
             if n_features > 0:
