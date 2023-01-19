@@ -182,7 +182,10 @@ def calculate_lpp(Y, model, test_indices):
 def score_latent_space_t(X_true, X_pred, perm):
     """The estimated latent space is still invariant to column permutations and
     sign flips. To fix these we do an exhaustive search over all permutations
-    and sign flips and return the value with the lowest MSE."""
+    and sign flips and return the value with the lowest MSE.
+
+    NOTE: Assumes d = 2!
+    """
     n_features = X_true.shape[1]
     X = X_pred[..., perm]
     denom = np.sum(X_true ** 2)
@@ -210,7 +213,7 @@ def score_latent_space_t(X_true, X_pred, perm):
     return best_rel
 
 
-def score_latent_space_single_perml(X_true, X_pred):
+def score_latent_space_perml(X_true, X_pred):
     """The estimated latent space is still invariant to column permutations and
     sign flips. To fix these we do an exhaustive search over all permutations
     and sign flips and return the value with the lowest MSE.
@@ -230,7 +233,7 @@ def score_latent_space_single_perml(X_true, X_pred):
             best_rel = rel
             best_perm = perm
 
-    return best_rel, best_perm
+    return best_rel
 
 
 def score_latent_space(X_true, X_pred):

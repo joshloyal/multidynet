@@ -166,7 +166,6 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
             Sigma = tau @ cor @ tau
         else:
             Sigma = tau ** 2
-
         z = rng.choice([0, 1], size=n_nodes)
         c = np.zeros(n_features)
         c[:len(center)] = center
@@ -193,8 +192,7 @@ def correlated_dynamic_multilayer_network(n_nodes=100, n_layers=4, n_time_steps=
         lmbda = np.zeros((n_layers, n_features))
         lmbda[0] = rng.choice([-1, 1], size=n_features)
         c = rng.choice([-1, 1], size=((n_layers - 1) * n_features)).reshape(n_layers - 1, n_features)
-        #lmbda[1:] = c + 0.5 * rng.randn(n_layers - 1, n_features)
-        lmbda[1:] = c + rng.uniform(-0.5, 0.5, size = (n_layers - 1, n_features))
+        lmbda[1:] = c + 0.5 * rng.randn(n_layers - 1, n_features)
     else:
         X = None
         lmbda = None

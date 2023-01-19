@@ -208,7 +208,8 @@ def initialize_svt(Y, n_features):
             tau = np.sqrt(n_nodes * np.mean(A))
             u,s,v = np.linalg.svd(A, hermitian=True)
             ids = s >= tau
-            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], 1e-3, 0.8)  #, 1-EPS)
+            P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
+            #P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], 1e-3, 0.8)  
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
 
             # diagonal is undefined (e.g., missing)
@@ -218,22 +219,30 @@ def initialize_svt(Y, n_features):
             if n_features > 0:
                 d = delta_init[k, t].reshape(-1, 1)
                 resid[k, t] = Theta - d - d.T
-                eigvals, eigvecs = np.linalg.eigh(resid[k, t])
-
-                ids = np.argsort(np.abs(eigvals))[::-1]
-                eigvecs = eigvecs[:, ids][:, :n_features] 
+                
+                # center columns for identifiability: J @ resid @ J
+                J = np.eye(n_nodes) - (1/n_nodes) * np.ones((n_nodes, n_nodes))
+                resid[k, t] = J @ resid[k, t] @ J 
                 if V[t] is None:
-                    V[t] = eigvecs
+                    V[t] = resid[k, t]
                 else:
-                    V[t] = np.hstack((V[t], eigvecs)) 
+                    V[t] = np.hstack((V[t], resid[k, t])) 
+                
+                #eigvals, eigvecs = np.linalg.eigh(resid[k, t])
+                #ids = np.argsort(np.abs(eigvals))[::-1]
+                #eigvecs = eigvecs[:, ids][:, :n_features] 
+                #if V[t] is None:
+                #    V[t] = eigvecs
+                #else:
+                #    V[t] = np.hstack((V[t], eigvecs)) 
     
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features))
         for t in range(n_time_steps):
-            u, s, v = np.linalg.svd(V[t])
-            X[t] = u[:, :n_features]
+            u, s, v = sp.linalg.svds(V[t], k=n_features)
+            X[t] = u 
         X = smooth_positions_procrustes(X)
-
+        
         for k in range(n_layers):
             lmbda_init[k] = initialize_lambda(resid[k], X)
         lambda0 = np.abs(lmbda_init[0])
@@ -700,14 +709,17 @@ class DynamicMultilayerNetworkLSM(object):
         #for i in range(1, len(models)):
         #    if models[i].criteria_[-1] > best_criteria:
         #        best_model = models[i]
-        
-        best_idx = np.argmax([model.auc_ for model in models])
+        #        best_criteria = models[i].criteria_[-1]
+
+        #best_idx = np.argmax([model.auc_ for model in models])
+        best_idx = np.argmax([model.criteria_[-1] for model in models])
         best_model = models[best_idx]
         #best_model = models[0]
         #best_criteria = models[0].auc_
         #for i in range(1, len(models)):
         #    if models[i].auc_ > best_criteria:
         #        best_model = models[i]
+        #        best_criteria = models[i].auc_
 
         if not best_model.converged_:
             warnings.warn('Best model did not converge. '
