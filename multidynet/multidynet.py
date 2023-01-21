@@ -209,7 +209,6 @@ def initialize_svt(Y, n_features):
             u,s,v = np.linalg.svd(A, hermitian=True)
             ids = s >= tau
             P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
-            #P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], 1e-3, 0.8)  
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
 
             # diagonal is undefined (e.g., missing)
@@ -711,8 +710,8 @@ class DynamicMultilayerNetworkLSM(object):
         #        best_model = models[i]
         #        best_criteria = models[i].criteria_[-1]
 
-        #best_idx = np.argmax([model.auc_ for model in models])
-        best_idx = np.argmax([model.criteria_[-1] for model in models])
+        best_idx = np.argmax([model.auc_ for model in models])
+        #best_idx = np.argmax([model.criteria_[-1] for model in models])
         best_model = models[best_idx]
         #best_model = models[0]
         #best_criteria = models[0].auc_

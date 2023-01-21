@@ -143,19 +143,26 @@ def initialize_svt(Y, n_features):
         if n_features > 0:
             d = delta_init[k].reshape(-1, 1)
             resid[k] = Theta - d - d.T
-            eigvals, eigvecs = np.linalg.eigh(resid[k])
 
-            ids = np.argsort(np.abs(eigvals))[::-1]
-            eigvecs = eigvecs[:, ids][:, :n_features] 
+            J = np.eye(n_nodes) - (1/n_nodes) * np.ones((n_nodes, n_nodes))
+            resid[k] = J @ resid[k] @ J 
             if V is None:
-                V = eigvecs
+                V = resid[k]
             else:
-                V = np.hstack((V, eigvecs)) 
+                V = np.hstack((V, resid[k])) 
+
+            #eigvals, eigvecs = np.linalg.eigh(resid[k])
+            #ids = np.argsort(np.abs(eigvals))[::-1]
+            #eigvecs = eigvecs[:, ids][:, :n_features] 
+            #if V is None:
+            #    V = eigvecs
+            #else:
+            #    V = np.hstack((V, eigvecs)) 
     
     if n_features > 0:
         X = np.zeros((n_nodes, n_features))
-        u, s, v = np.linalg.svd(V)
-        X = u[:, :n_features]
+        u, s, v = sp.linalg.svds(V, k=n_features)
+        X = u
 
         for k in range(n_layers):
             lmbda_init[k] = initialize_lambda(resid[k], X)
@@ -217,7 +224,7 @@ def initialize_parameters(Y, n_features, lambda_odds_prior, lambda_var_prior,
     # initialize node-effects based on degree
     if init_params_type != 'svt' and n_features > 0:
         #delta = initialize_node_effects(Y)
-        delta = rng.randn(n_layers, n_time_steps, n_nodes)
+        delta = rng.randn(n_layers, n_nodes)
 
     delta_sigma = np.ones((n_layers, n_nodes))
 
@@ -246,7 +253,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                   init_covariance_type, init_params_type,
                    max_iter, tol, random_state,
                   stopping_criteria='loglik',
-                  callback=None, verbose=True):
+                  callback=None, verbose=True, idx=0):
 
     n_layers, n_nodes, _ = Y.shape
 
@@ -255,6 +262,9 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     #   auc: training AUC
     criteria = -np.infty
     n_nochange = 0
+    
+    if init_params_type == 'both' and idx == 0:
+        init_params_type = 'svt'
 
     # initialize parameters of the model
     model = initialize_parameters(
@@ -361,6 +371,10 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
                     break
             else:
                 n_nochange = 0
+    
+    probas = calculate_probabilities(
+        model.X_, model.lambda_, model.delta_)
+    model.auc_ = calculate_auc(Y, probas)
 
     return model
 
@@ -459,15 +473,17 @@ class MultilayerNetworkLSM(object):
                 self.init_type,
                 self.max_iter, self.tol, seed,
                 stopping_criteria=self.stopping_criteria,
-                callback=callback, verbose=verbose)
-            for seed in seeds)
+                callback=callback, verbose=verbose, idx=i)
+            for i, seed in enumerate(seeds))
 
         # choose model with the largest convergence criteria
-        best_model = models[0]
-        best_criteria = models[0].criteria_[-1]
-        for i in range(1, len(models)):
-            if models[i].criteria_[-1] > best_criteria:
-                best_model = models[i]
+        best_idx = np.argmax([model.auc_ for model in models])
+        best_model = models[best_idx]
+        #best_model = models[0]
+        #best_criteria = models[0].criteria_[-1]
+        #for i in range(1, len(models)):
+        #    if models[i].criteria_[-1] > best_criteria:
+        #        best_model = models[i]
 
         if not best_model.converged_:
             warnings.warn('Best model did not converge. '
