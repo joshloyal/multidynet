@@ -26,3 +26,14 @@ class TestMetricsCallback(object):
                 self.probas_, probas, self.test_indices_))
 
         self.times_.append(time.time() - self.start_time_)
+
+
+class TimeitCallback(object):
+    def __init__(self):
+        self.times_ = []
+
+    def tick(self):
+        self.start_time_ = time.time()
+
+    def __call__(self, model, Y):
+        self.times_.append(time.time() - self.start_time_)

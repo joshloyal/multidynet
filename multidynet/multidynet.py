@@ -383,6 +383,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
     b = np.full(n_features, 0.5)
     X0_cov_prior_df = n_features + 2
     X0_cov_prior_scale = np.eye(n_features)
+    XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
 
     if model.callback_ is not None:
         model.callback_.tick()
@@ -407,7 +408,6 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         sigma_sq_prec = model.c_sigma_sq_ / model.d_sigma_sq_
 
-        XLX = np.zeros((n_layers, n_time_steps, n_nodes, n_nodes))
         if n_features > 0:
             if approx_type == 'structured':
                 update_latent_positions(
@@ -434,7 +434,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
 
         tau_sq_prec = model.a_tau_sq_delta_ / model.b_tau_sq_delta_
         sigma_sq_prec = model.c_sigma_sq_delta_ / model.d_sigma_sq_delta_
-
+        
         if approx_type == 'structured':
             update_deltas(
                 Y, model.delta_, model.delta_sigma_, model.delta_cross_cov_,
@@ -653,7 +653,7 @@ class DynamicMultilayerNetworkLSM(object):
         self.n_jobs = n_jobs
         self.random_state = random_state
 
-    def fit(self, Y, callback=None, n_samples=None):
+    def fit(self, Y, callback=None, n_samples=None, verbose=True):
         """Infer the approximate variational posterior of the eigenmodel
         for dynamic multilayer networks based on the observed network Y.
 
@@ -690,7 +690,7 @@ class DynamicMultilayerNetworkLSM(object):
 
         # run the elbo optimization over different initializations
         seeds = random_state.randint(np.iinfo(np.int32).max, size=self.n_init)
-        verbose = True if self.n_init == 1 else False
+        verbose = verbose if self.n_init == 1 else False
         models = Parallel(n_jobs=self.n_jobs)(delayed(optimize_elbo)(
                 Y, self.n_features_, self.lambda_odds_prior,
                 self.lambda_var_prior, self.init_covariance_type,
@@ -835,7 +835,8 @@ class DynamicMultilayerNetworkLSM(object):
         self.X_cross_cov_ = model.X_cross_cov_
 
         # match signed-permutations across time
-        self.X_ = smooth_positions(self.X_)
+        if self.n_features > 0:
+            self.X_ = smooth_positions(self.X_)
 
         # transform to identifiable parameterization
         if self.X_ is not None:
@@ -860,7 +861,7 @@ class DynamicMultilayerNetworkLSM(object):
             self.init_cov_df_ = model.X0_cov_df_
             self.init_cov_scale_ = model.X0_cov_scale_
             self.init_cov_ = (np.linalg.pinv(self.init_cov_scale_) /
-                (self.init_cov_df_ - n_features - 1))
+                (self.init_cov_df_ - self.n_features - 1))
         else:
             self.a_tau_sq_ = model.a_tau_sq_
             self.b_tau_sq_ = model.b_tau_sq_
