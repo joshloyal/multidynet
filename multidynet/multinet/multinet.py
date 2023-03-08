@@ -150,15 +150,7 @@ def initialize_svt(Y, n_features):
                 V = resid[k]
             else:
                 V = np.hstack((V, resid[k])) 
-
-            #eigvals, eigvecs = np.linalg.eigh(resid[k])
-            #ids = np.argsort(np.abs(eigvals))[::-1]
-            #eigvecs = eigvecs[:, ids][:, :n_features] 
-            #if V is None:
-            #    V = eigvecs
-            #else:
-            #    V = np.hstack((V, eigvecs)) 
-    
+ 
     if n_features > 0:
         X = np.zeros((n_nodes, n_features))
         u, s, v = sp.linalg.svds(V, k=n_features)
@@ -479,11 +471,6 @@ class MultilayerNetworkLSM(object):
         # choose model with the largest convergence criteria
         best_idx = np.argmax([model.auc_ for model in models])
         best_model = models[best_idx]
-        #best_model = models[0]
-        #best_criteria = models[0].criteria_[-1]
-        #for i in range(1, len(models)):
-        #    if models[i].criteria_[-1] > best_criteria:
-        #        best_model = models[i]
 
         if not best_model.converged_:
             warnings.warn('Best model did not converge. '

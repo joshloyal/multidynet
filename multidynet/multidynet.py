@@ -203,16 +203,11 @@ def initialize_svt(Y, n_features):
         for k in range(n_layers):
             A = Y[k, t].copy()
             A[A == -1] = 0
-            #dyads = np.tril_indices_from(A, k=-1)
-            #tau = np.sqrt(n_nodes * np.mean(A[dyads]))
             tau = np.sqrt(n_nodes * np.mean(A))
             u,s,v = np.linalg.svd(A, hermitian=True)
             ids = s >= tau
             P_tilde = np.clip(u[:, ids] @ np.diag(s[ids]) @ v[ids, :], EPS, 1-EPS)
             Theta = logit(0.5 * (P_tilde + P_tilde.T))
-
-            # diagonal is undefined (e.g., missing)
-            #Theta[np.diag_indices_from(Theta)] = 0.  
 
             delta_init[k, t] = initialize_node_effects_cont(Theta)
             if n_features > 0:
@@ -226,15 +221,7 @@ def initialize_svt(Y, n_features):
                     V[t] = resid[k, t]
                 else:
                     V[t] = np.hstack((V[t], resid[k, t])) 
-                
-                #eigvals, eigvecs = np.linalg.eigh(resid[k, t])
-                #ids = np.argsort(np.abs(eigvals))[::-1]
-                #eigvecs = eigvecs[:, ids][:, :n_features] 
-                #if V[t] is None:
-                #    V[t] = eigvecs
-                #else:
-                #    V[t] = np.hstack((V[t], eigvecs)) 
-    
+                 
     if n_features > 0:
         X = np.zeros((n_time_steps, n_nodes, n_features))
         for t in range(n_time_steps):
@@ -257,7 +244,6 @@ def initialize_svt(Y, n_features):
 
 def initialize_parameters(Y, n_features, init_params_type,
                           lambda_odds_prior, lambda_var_prior,
-                          #a, b, c, d, a_delta, b_delta, c_delta, d_delta,
                           init_covariance_type, c, d,
                           a_delta, b_delta, c_delta, d_delta,
                           approx_type, callback, random_state):
@@ -272,9 +258,6 @@ def initialize_parameters(Y, n_features, init_params_type,
     # social trajectory initialization
     if n_features > 0:
         # initialize latent space to something smooth over time.
-        #X = rng.randn(n_time_steps, n_nodes, n_features)
-        #for t in range(n_time_steps):
-        #    X[t] -= np.mean(X[t], axis=0)
         if init_params_type == 'svt':
             X, lmbda, delta = initialize_svt(Y, n_features)
         else:
@@ -318,8 +301,6 @@ def initialize_parameters(Y, n_features, init_params_type,
 
     
     if init_params_type != 'svt' and n_features > 0:
-        #_, _, delta = initialize_svt(Y, 0)
-        #delta = initialize_node_effects(Y)
         delta = rng.randn(n_layers, n_time_steps, n_nodes)
 
     delta_sigma = np.ones((n_layers, n_time_steps, n_nodes))
@@ -379,7 +360,7 @@ def optimize_elbo(Y, n_features, lambda_odds_prior, lambda_var_prior,
         init_covariance_type, c, d, a_delta, b_delta, c_delta, d_delta,
         approx_type, callback, random_state)
 
-    a = np.full(n_features, 1.5)  # 0.5 * (n_features + 2)
+    a = np.full(n_features, 1.5)  
     b = np.full(n_features, 0.5)
     X0_cov_prior_df = n_features + 2
     X0_cov_prior_scale = np.eye(n_features)
@@ -615,10 +596,10 @@ class DynamicMultilayerNetworkLSM(object):
     --------
 
     >>> from multidynet import DynamicMultilayerNetworkLSM
-    >>> from dynetlsm.datasets import load_households
-    >>> Y =
+    >>> from dynetlsm.datasets import load_icews
+    >>> Y, countries, layer_labels, time_labels = load_icews(dataset='large')
     >>> Y.shape
-    (,,,)
+    (4, 96, 100, 100)
     >>> model = DynamicMultilayerNetworkLSM().fit(Y)
 
     References
@@ -626,11 +607,11 @@ class DynamicMultilayerNetworkLSM(object):
     """
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
-                 lambda_var_prior=10,
+                 lambda_var_prior=4,
                  init_covariance_type='full',
                  c=2., d=2.,
                  a_delta=4.1, b_delta=2.1 * 10, c_delta=2., d_delta=2.,
-                 init_type='svt', n_init=1, max_iter=1000, tol=1e-2,
+                 init_type='both', n_init=4, max_iter=1000, tol=1e-2,
                  stopping_criteria='loglik',
                  approx_type='structured',
                  n_jobs=1, random_state=None):
@@ -702,23 +683,9 @@ class DynamicMultilayerNetworkLSM(object):
                 callback=callback, verbose=verbose, idx=i)
             for i, seed in enumerate(seeds))
 
-        # choose model with the largest in-sample AUC #convergence criteria
-        #best_model = models[0]
-        #best_criteria = models[0].criteria_[-1]
-        #for i in range(1, len(models)):
-        #    if models[i].criteria_[-1] > best_criteria:
-        #        best_model = models[i]
-        #        best_criteria = models[i].criteria_[-1]
 
         best_idx = np.argmax([model.auc_ for model in models])
-        #best_idx = np.argmax([model.criteria_[-1] for model in models])
         best_model = models[best_idx]
-        #best_model = models[0]
-        #best_criteria = models[0].auc_
-        #for i in range(1, len(models)):
-        #    if models[i].auc_ > best_criteria:
-        #        best_model = models[i]
-        #        best_criteria = models[i].auc_
 
         if not best_model.converged_:
             warnings.warn('Best model did not converge. '
