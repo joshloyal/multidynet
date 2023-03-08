@@ -17,9 +17,6 @@ def load_icews(dataset='small', country_names='full', year_range=None):
     Y = joblib.load(open(file_name, 'rb'))
 
     if country_names == 'full':
-        #countries = np.loadtxt(
-        #    join(file_path, dir_name, 'numpy_data', 'icews_countries.txt'),
-        #    delimiter='\n', dtype=np.unicode)
         countries = pd.read_csv(
             join(file_path, dir_name, 'numpy_data', 'icews_countries.csv')).values.ravel()
 
@@ -43,5 +40,8 @@ def load_icews(dataset='small', country_names='full', year_range=None):
         end_id = np.where(end == time_labels)[0][0]
         Y = Y[:, start_id:end_id, :, :]
         time_labels = time_labels[start_id:end_id]
-
-    return np.ascontiguousarray(Y), countries, layer_labels, time_labels
+    
+    if dataset == 'small':
+        return np.ascontiguousarray(Y)[:, -12:, ...], countries, layer_labels, time_labels[-12:]
+    else:
+        return np.ascontiguousarray(Y), countries, layer_labels, time_labels
