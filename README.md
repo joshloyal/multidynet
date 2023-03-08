@@ -42,11 +42,11 @@ from multidynet import DynamicMultilayerNetworkLSM
 from multidynet.datasets import load_icews
 from multidynet.plots import plot_latent_space
 
+
 # load ICEWS data set (4 layers, 12 months and 65 countries)
 Y, countries, layer_labels, time_labels = load_icews(dataset='small')
 Y.shape
 # >>> (4, 12, 65, 65)
-
 
 # fit the model
 model = DynamicMultilayerNetworkLSM(max_iter=500, n_features=2, init_type='svt')
