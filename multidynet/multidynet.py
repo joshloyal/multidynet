@@ -533,12 +533,62 @@ class DynamicMultilayerNetworkLSM(object):
     n_features : int (default=2)
         The number of latent features. This is the dimension of the
         latent space.
+    
+    lambda_odds_prior : float (default=1)
+        The prior odds of a component in the reference layering being positive.
+        The default prior assumes an assortative reference layer is as likely
+        as a disassortative reference layer.
 
-    n_init : int (default=1)
+    lambda_var_prior : float (default=4)
+        The variance of the normal prior placed on the homophily parameters.
+    
+    init_covariance_type : str (default='full')
+        The form of the covariance matrix of the initial latent positions.
+
+        - If "full", then the covariance matrix is a general 
+          n_feature x n_feature covariance matrix.
+        - If "diag", then covariance matrix is a diagonal matrix, e.g.,
+          the latent features are uncorrelated a prior with possibly
+          different variances.
+        - If "spherical", then the covariance matrix is a multiple of the
+          identity matrix, e.g., the latent features are uncorrelated a priori
+          and share a common variance.
+    
+    c : float (default=2.)
+        Shape parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
+
+    d : float (default=2.)
+        Scale parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
+    
+    a_delta : float (default=4.1)
+        Shape parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    b_delta : float (default=2.1 * 10)
+        Scale parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
+        on `tau_sq_delta`.
+
+    c_delta : float (default=2.)
+        Shape parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
+
+    d_delta : float (default=2.)
+        Scale parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
+        on `sigma_sq_delta`.
+    
+    init_type : str (default='both')
+        Initialization scheme for the model parameters.
+        
+        - If "random", the parameters are randomly sampled.
+        - If "svt", a scheme based on singular value thresholding.
+        - If "both", both the svt and random schemes are used.
+
+    n_init : int (default=4)
         The number of initializations to perform. The result with the highest
-        expected log-likelihood is kept.
+        expected in-sample AUC is kept. This parameter is ignored when
+        init_type='svt'.
 
-    max_iter : int (default=500)
+    max_iter : int (default=1000)
         The number of coordinate ascent variational inference (CAVI) iterations
         to perform.
 
@@ -546,41 +596,18 @@ class DynamicMultilayerNetworkLSM(object):
         The convergence threshold. CAVI iterations will stop when the expected
         log-likelihood gain is below this threshold.
 
-    lambda_odds_prior : float (default=2)
-        The prior odds of a component in the reference layering being positive.
-        Our prior assumes an assortative reference layer is twice as likely
-        as a disassortative reference layer.
+    stopping_criteria : str or None (default='loglik')
+        The criteria used to determine whether the CAVI algorithm converged.
 
-    lambda_var_prior : float (default=4)
-        The variance of the normal prior placed on the assortativity parameters.
+        - If "loglik", the expected loglikelihood is monitored.
+        - If "auc", the in-sample AUC is monitored.
+        - If None, the algorithm is run for `max_iter` iterations.
+    
+    approx_type : str, (default='structured')
+        The type of variational family to use.
 
-    a : float (default=4.)
-        Shape parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-
-    b : float (default=20.)
-        Scale parameter of the InvGamma(a/2, b/2) prior placed on `tau_sq`.
-
-    c : float (default=20.)
-        Shape parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-
-    d : float (default=2.)
-        Scale parameter of the InvGamma(c/2, d/2) prior placed on `sigma_sq`.
-
-    a_delta : float (default=4.)
-        Shape parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
-        on `tau_sq_delta`.
-
-    b_delta : float (default=20.)
-        Scale parameter of the InvGamma(a_delta/2, b_delta/2) prior placed
-        on `tau_sq_delta`.
-
-    c_delta : float (default=20.)
-        Shape parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
-        on `sigma_sq_delta`.
-
-    d_delta : float (default=2.)
-        Scale parameter of the InvGamma(c_delta/2, d_delta/2) prior placed
-        on `sigma_sq_delta`.
+        - If "structured", us the structured mean-field family (SMF).
+        - If "mean_field", use the mean-field family (MF).
 
     n_jobs : int (default=1)
         The number of jobs to run in parallel. The number of initializations are
@@ -597,13 +624,10 @@ class DynamicMultilayerNetworkLSM(object):
 
     >>> from multidynet import DynamicMultilayerNetworkLSM
     >>> from dynetlsm.datasets import load_icews
-    >>> Y, countries, layer_labels, time_labels = load_icews(dataset='large')
+    >>> Y, countries, layer_labels, time_labels = load_icews(dataset='small')
     >>> Y.shape
-    (4, 96, 100, 100)
+    (4, 12, 65, 65)
     >>> model = DynamicMultilayerNetworkLSM().fit(Y)
-
-    References
-    ----------
     """
     def __init__(self, n_features=2,
                  lambda_odds_prior=1,
