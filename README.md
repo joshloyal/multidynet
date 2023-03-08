@@ -49,11 +49,10 @@ Y.shape
 
 
 # fit the model
-model = DynamicMultilayerNetworkLSM(
-    max_iter=500, n_features=2, init_type='svt')
-
+model = DynamicMultilayerNetworkLSM(max_iter=500, n_features=2, init_type='svt')
 model.fit(Y)
 
+# extract the homophily coefficients (all positive)
 print(model.lambda_)
 # [[1.         1.        ]
 #  [0.93377735 0.82923015]

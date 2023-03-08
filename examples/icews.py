@@ -14,7 +14,7 @@ model.fit(Y)
 
 print(model.lambda_)
 
-fig, ax = plt.subplots(figsize=(20, 6), ncols=2)
+fig, ax = plt.subplots(figsize=(25, 12), ncols=2)
 
 
 k = 0
