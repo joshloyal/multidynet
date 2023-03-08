@@ -4,3 +4,6 @@ scikit-learn
 cython
 tqdm
 networkx
+imageio
+pandas
+seaborn

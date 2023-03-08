@@ -15,13 +15,40 @@ from scipy.stats import norm
 from scipy.special import expit
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import check_random_state
-from dynetlsm.plots import get_colors
 
 
 __all__ = ['plot_network', 'make_network_animation',
            'plot_sociability', 'plot_lambda', 'plot_node_trajectories',
            'plot_pairwise_distances', 'plot_pairwise_probabilities',
            'plot_latent_space']
+
+
+def cmap_to_hex(cmap):
+    return np.asarray([to_hex(c) for c in cmap.colors])
+
+
+def get_color20():
+    #colors = np.asarray([to_hex(c) for c in plt.cm.get_cmap('tab20').colors])
+    colors = cmap_to_hex(plt.cm.get_cmap('tab20'))
+
+    # the most common case is the need for two colors. The first two do
+    # not have a lot of contrast so swap them
+    colors[1], colors[2] = colors[2], colors[1]
+
+    return colors
+
+
+def get_husl(n_groups):
+    colors = sns.color_palette('husl', n_colors=n_groups)
+    return np.asarray([to_hex(c) for c in colors])
+
+
+def get_colors(labels):
+    # integer encode labels
+    encoder = LabelEncoder().fit(labels)
+    n_groups = encoder.classes_.shape[0]
+
+    return get_color20() if n_groups <= 20 else get_husl(n_groups)
 
 
 def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
@@ -666,63 +693,6 @@ def plot_homophily_matrix(model, q_alpha=0.05,
     plt.subplots_adjust(hspace=0.5)
 
     return fig, axes
-
-#def plot_homophily_matrix(model, q_alpha=0.05, colors=None,
-#                          layer_labels=None, height=0.5,
-#                          fontsize=12, figsize=(12, 6)):
-#    n_layers, n_features = model.lambda_.shape
-#
-#    if layer_labels is None:
-#        layer_labels = ['k = {}'.format(k + 1) for k in range(n_layers)]
-#
-#    fig, ax = plt.subplots(figsize=figsize)
-#
-#    if colors is None:
-#        colors = get_colors(np.arange(n_layers))
-#
-#    z_alpha = norm.ppf(1 - q_alpha / 2.)
-#    for p in range(n_features):
-#        xerr = z_alpha * np.sqrt(model.lambda_sigma_[:, p, p])
-#
-#        #colors = ['red' if model.lambda_[k, p] > 0 else 'blue' for
-#        #          k in range(n_layers)]
-#        ax.hlines(np.arange(n_layers) + 0.5 * p, 0, model.lambda_[:, p], lw=1,
-#                  color=colors, linestyles='--')
-#        ax.errorbar(model.lambda_[:, p], np.arange(n_layers) + 0.5 * p,
-#                    fmt='o',
-#                    xerr=xerr, ecolor='k', capsize=5,
-#                    color='k', markersize=9, markeredgecolor='w')
-#
-#        # add text
-#        for k in range(n_layers):
-#            align = 'right' if model.lambda_[k, p]  >= 0 else 'left'
-#
-#            lmbda = model.lambda_[k, p]
-#            if k == 0:
-#                txt = '{}'.format(lmbda)
-#            else:
-#                txt = '{:.3f} ({:.3f}, {:.3f})'.format(
-#                    lmbda, lmbda - xerr[k], lmbda + xerr[k])
-#            ax.text(lmbda, k + 0.5 * p - 0.1, txt, horizontalalignment=align)
-#
-#    ax.set_yticks(np.arange(n_layers) + 0.25)
-#    ax.set_yticklabels(layer_labels, fontsize=fontsize)
-#    ax.invert_yaxis()
-#    #ax.set_title('p = {}'.format(p + 1), fontsize=fontsize)
-#
-#    ax.set_xlabel('Homophily Parameter ($\lambda_{kp}$)',
-#                  fontsize=fontsize)
-#
-#    #x_max = max([ax.get_xlim()[1] for ax in axes.flat])
-#    if np.all(model.lambda_ >= 0):
-#        ax.set_xlim(0, ax.get_xlim()[1])
-#    else:
-#        ax.vlines(0, 0, n_layers - 0.5 * (n_features - 1), linestyles='dotted', color='k')
-#    sns.despine(ax=ax, bottom=True)
-#
-#    sns.set_style('white')
-#
-#    return fig, ax
 
 
 def plot_lambda(model, q_alpha=0.05, layer_labels=None, height=0.5,
