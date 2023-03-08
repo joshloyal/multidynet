@@ -7,3 +7,4 @@ networkx
 imageio
 pandas
 seaborn
+joblib
