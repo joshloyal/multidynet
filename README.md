@@ -14,6 +14,7 @@ Dependencies
 
 - Python (>= 3.10)
 
+and the requirements highlighted in (requirements.txt)[requirements.txt]
 
 Installation
 ------------
