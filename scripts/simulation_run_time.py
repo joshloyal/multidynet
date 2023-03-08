@@ -62,7 +62,6 @@ def run_benchmark():
 def benchmark_single(n_nodes):
     data = pd.concat(Parallel(n_jobs=-1)(delayed(run_benchmark)() for i in range(10)))
 
-
     dir_name = 'output_run_time'
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
