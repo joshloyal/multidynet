@@ -6,15 +6,7 @@
 
 This package provides an interface for the model described in
 "An Eigenmodel for Dynamic Multilayer Networks". Inference is performed using
-coordinante ascent variational inference.
-
-BibTeX reference to cite, if you use this package:
-<!--
-```bibtex
-@article{loyal2021eigenmodel,
-}
-```
--->
+coordinante ascent variational inference. For more details, see [Loyal and Chen, (2021)](https://arxiv.org/abs/2103.12831).
 
 Dependencies
 ------------
@@ -25,7 +17,7 @@ Dependencies
 
 Installation
 ------------
-You need a working installation of numpy and scipy to install ``multidynet``. If you have a working installation of numpy and scipy, the easiest way to install ``multidynet`` is using ``pip``:
+You need a working installation of numpy, scipy, and Cython to install ``multidynet``. The easiest way to install ``multidynet`` is using ``pip``:
 
 ```
 git clone https://github.com/joshloyal/multidynet.git
@@ -38,3 +30,7 @@ Or install using pip and GitHub:
 ```
 pip install -U git+https://github.com/joshloyal/multidynet.git
 ```
+
+
+Example
+-------
