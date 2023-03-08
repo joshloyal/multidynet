@@ -8,6 +8,7 @@ This package provides an interface for the model described in
 "An Eigenmodel for Dynamic Multilayer Networks". Inference is performed using
 coordinante ascent variational inference. For more details, see [Loyal and Chen (2021)](https://arxiv.org/abs/2103.12831).
 
+
 Dependencies
 ------------
 ``multidynet`` requires:
@@ -16,9 +17,10 @@ Dependencies
 
 and the requirements highlighted in (requirements.txt)[requirements.txt]
 
+
 Installation
 ------------
-You need a working installation of numpy, scipy, and Cython to install ``multidynet``. The easiest way to install ``multidynet`` is using ``pip``:
+You need a working installation of numpy, scipy, and Cython to install ``multidynet``. The easiest way to install ``multidynet`` is using ``pip``. Use the following commands to get the copy from GitHub and install all the dependencies:
 
 ```
 git clone https://github.com/joshloyal/multidynet.git
@@ -31,7 +33,6 @@ Or install using pip and GitHub:
 ```
 pip install -U git+https://github.com/joshloyal/multidynet.git
 ```
-
 
 Example
 -------
