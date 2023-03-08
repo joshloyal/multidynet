@@ -834,7 +834,7 @@ def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
 
 def plot_latent_space(Y, X, X_sigma=None, dims=[0, 1],
                  z=None, figsize=(8, 6),
-                 node_color='orangered', 
+                 node_color='gray', 
                  colors=None, alpha=1.0, contour_alpha=0.25,
                  size=300, edgecolors='w',
                  edge_width=0.25, node_labels=None,
