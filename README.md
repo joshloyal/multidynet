@@ -20,9 +20,8 @@ Dependencies
 ------------
 ``multidynet`` requires:
 
-- Python (>= 3.7)
+- Python (>= 3.10)
 
-and the requirements highlighted in [requirements.txt](requirements.txt).
 
 Installation
 ------------
