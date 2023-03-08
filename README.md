@@ -6,7 +6,7 @@
 
 This package provides an interface for the model described in
 "An Eigenmodel for Dynamic Multilayer Networks". Inference is performed using
-coordinante ascent variational inference. For more details, see [Loyal and Chen, (2021)](https://arxiv.org/abs/2103.12831).
+coordinante ascent variational inference. For more details, see [Loyal and Chen (2021)](https://arxiv.org/abs/2103.12831).
 
 Dependencies
 ------------
