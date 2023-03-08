@@ -27,9 +27,10 @@ plot_latent_space(Y[k, t], model.Z_[t], X_sigma=model.Z_sigma_[t],
                    ax=ax[0])
 ax[0].axhline(0, linestyle='--', c='k')
 ax[0].axvline(0, linestyle='--', c='k')
-ax[0].set_xlabel('Dimension 1')
-ax[0].set_ylabel('Dimension 2')
-ax[0].set_title(time_labels[t])
+ax[0].set_xlabel('Dimension 1', fontsize=16)
+ax[0].set_ylabel('Dimension 2', fontsize=16)
+ax[0].set_title(time_labels[t], fontsize=18)
+ax[0].tick_params(axis='both', which='major', labelsize=12)
 
 k = 0
 t = 11
@@ -41,8 +42,9 @@ plot_latent_space(Y[k, t], model.Z_[t], X_sigma=model.Z_sigma_[t],
                    ax=ax[1])
 ax[1].axhline(0, linestyle='--', c='k')
 ax[1].axvline(0, linestyle='--', c='k')
-ax[1].set_xlabel('Dimension 1')
-ax[1].set_ylabel('Dimension 2')
-ax[1].set_title(time_labels[t])
+ax[1].set_xlabel('Dimension 1', fontsize=16)
+ax[1].set_ylabel('Dimension 2', fontsize=16)
+ax[1].set_title(time_labels[t], fontsize=18)
+ax[1].tick_params(axis='both', which='major', labelsize=12)
 
 fig.savefig('icews_small_ls.png', dpi=300, bbox_inches='tight')
