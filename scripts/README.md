@@ -45,7 +45,7 @@ To evaluate the run times of the SMF and MF algorithm and produce Figure 5, run 
 >>> python plot_results.py
 ```
 
-### Section 5.1 (ICEWs Networks)
+### Section 5.1 and Appendix J (ICEWs Networks)
 
 ```bash
 >>> python icews.py
@@ -57,7 +57,7 @@ To produce the figures, you will need to run the cells in the corresponding Jupy
 >>> jupyter notebook output_icews/ICEWS.ipynb
 ```
 
-### Section 5.2 (Primary School Contact Networks)
+### Section 5.2 and Appendix J (Primary School Contact Networks)
 
 ```bash
 >>> python primaryschool.py
@@ -67,4 +67,25 @@ To produce the figures, you will need to run the cells in the corresponding Jupy
 
 ```bash
 >>> jupyter notebook output_primaryschool/PrimarySchool.ipynb
+```
+
+### Appendix H (Evaluation of Information Criteria for Dimension Selection)
+
+The following commands run the simulations and produce Figure 13.
+
+```bash
+>>> python simulation_dimension_selection.py
+>>> cd output_dimension_selection/
+>>> python plot_results.py
+```
+
+### Appendix I (Additional Simulation: Decreasing sigma as T increases)
+
+The following commands run the simulations and produce Figure 14.
+
+```bash
+>>> python simulation_parameter_recovery_additional.py
+>>> cd output_parameter_recovery_additional/
+>>> python process.py
+>>> python plot_results.py
 ```
