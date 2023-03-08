@@ -8,7 +8,7 @@ from os.path import dirname, join
 __all__ = ['load_primaryschool']
 
 
-def load_primaryschool():
+def load_primaryschool(reference_layer='Thursday'):
     module_path = dirname(__file__)
     file_path = join(module_path, 'raw_data')
 
@@ -42,5 +42,9 @@ def load_primaryschool():
         "2:20 to 2:40", "2:40 to 3:00", "3:00 to 3:20", "3:20 to 3:40",
         "3:40 to 4:00", "4:00 to 4:20", "4:20 to 4:40", "4:40 to 5:30"
     ]
+
+    if reference_layer != 'Thursday':
+        Y = Y[::-1]
+        layer_labels = ['Friday', 'Thursday']
 
     return np.ascontiguousarray(Y), X[:, 1], X[:, 2], layer_labels, time_labels

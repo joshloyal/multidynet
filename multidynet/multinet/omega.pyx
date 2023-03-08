@@ -12,20 +12,18 @@ import numpy as np
 cimport numpy as np
 
 
-def update_omega_single(double[::1] Xi,
-                        double[:, ::1] Xi_sigma,
-                        double[::1] Xj,
-                        double[:, ::1] Xj_sigma,
-                        double[::1] lmbdak,
-                        double[:, ::1] lmbdak_sigma,
-                        double deltaki,
-                        double deltakj,
-                        double deltaki_sigma,
-                        double deltakj_sigma,
-                        size_t n_features):
+cdef double calculate_psi(double[::1] Xi,
+                          double[:, ::1] Xi_sigma,
+                          double[::1] Xj,
+                          double[:, ::1] Xj_sigma,
+                          double[::1] lmbdak,
+                          double[:, ::1] lmbdak_sigma,
+                          double deltaki,
+                          double deltakj,
+                          double deltaki_sigma,
+                          double deltakj_sigma,
+                          size_t n_features):
     cdef double psi_sq = 0.
-    cdef double c_omega = 0.
-    cdef double omega = 0.
     cdef int p, q = 0
 
     # calculate the natural parameter
@@ -40,14 +38,19 @@ def update_omega_single(double[::1] Xi,
             psi_sq += ((lmbdak_sigma[p, q] + lmbdak[p] * lmbdak[q]) *
                        (Xi_sigma[p, q] + Xi[p] * Xi[q]) *
                        (Xj_sigma[p, q] + Xj[p] * Xj[q]))
+    
+    return psi_sq
+
+cdef double update_omega_single(double psi_sq):
+    cdef double c_omega = 0.
+    cdef double omega = 0.
 
     # calculate mean of a PG(1, sqrt(c_omega)) random variable
     c_omega = sqrt(psi_sq)
     omega = tanh(0.5 * c_omega)
     omega /= (2. * c_omega)
 
-    return omega, psi_sq
-
+    return omega
 
 cpdef double update_omega(const double[:, :, ::1] Y,
                           double[:, :, ::1] omega,
@@ -68,13 +71,14 @@ cpdef double update_omega(const double[:, :, ::1] Y,
         for i in range(n_nodes):
             for j in range(i):
                 if Y[k, i, j] != -1.0:
-                    omega[k, i, j], psi_sq = update_omega_single(
+                    psi_sq = calculate_psi(
                         X[i], X_sigma[i], X[j], X_sigma[j],
                         lmbda[k], lmbda_sigma[k],
                         delta[k, i], delta[k, j],
                         delta_sigma[k, i], delta_sigma[k, j],
                         n_features)
 
+                    omega[k, i, j] = update_omega_single(psi_sq)
                     omega[k, j, i] = omega[k, i, j]
 
                     psi = delta[k, i] + delta[k, j]

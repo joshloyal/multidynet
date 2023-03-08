@@ -34,7 +34,7 @@ def load_icews(dataset='small', country_names='full', year_range=None):
 
     time_labels = pd.date_range(
         start='January 01 2009', end='December 31 2016', freq='M')
-    time_labels = time_labels.strftime('%b %Y')
+    time_labels = time_labels.strftime('%B %Y')
 
     if year_range is not None:
         start = 'Jan {}'.format(year_range[0])

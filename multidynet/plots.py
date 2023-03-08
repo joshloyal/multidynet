@@ -20,7 +20,8 @@ from dynetlsm.plots import get_colors
 
 __all__ = ['plot_network', 'make_network_animation',
            'plot_sociability', 'plot_lambda', 'plot_node_trajectories',
-           'plot_pairwise_distances', 'plot_pairwise_probabilities']
+           'plot_pairwise_distances', 'plot_pairwise_probabilities',
+           'plot_latent_space']
 
 
 def normal_contour(mean, cov, n_std=2, ax=None, **kwargs):
@@ -149,9 +150,14 @@ def plot_network(Y, X, X_sigma=None, delta=None,
         ax.scatter(0, 0, color='k', marker='+', s=200)
 
         # draw two standard deviation contour
-        normal_contour([0, 0], tau_sq * np.eye(X.shape[1]), n_std=[1],
-                       linestyle='--', edgecolor='k',
-                       facecolor='none', zorder=1, ax=ax)
+        if isinstance(tau_sq, np.ndarray):
+            normal_contour([0, 0], tau_sq, n_std=[2],
+                           linestyle='--', edgecolor='k',
+                           facecolor='none', zorder=1, ax=ax)
+        else:
+            normal_contour([0, 0], tau_sq * np.eye(X.shape[1]), n_std=[1],
+                           linestyle='--', edgecolor='k',
+                           facecolor='none', zorder=1, ax=ax)
 
     if z is not None:
         ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.05), ncol=6,
@@ -198,7 +204,7 @@ def make_network_animation(filename, Y, X, X_sigma=None,
             ax.set_xlim(x_min - border, x_max + border)
             ax.set_ylim(y_min - border, y_max + border)
 
-            fname = tempfile.TemporaryFile(dir=tempdir, suffix='.png')
+            fname = tempfile.NamedTemporaryFile(dir=tempdir, suffix='.png')
             fig.savefig(fname, dpi=100)
             fname.seek(0)
             plt.close(fig)  # necessary to free memory
@@ -824,3 +830,88 @@ def plot_network_statistics(stat_sim, stat_obs=None, nrow=1, ncol=None,
             ax.set_ylabel('')
 
     return fig, axes
+
+
+def plot_latent_space(Y, X, X_sigma=None, dims=[0, 1],
+                 z=None, figsize=(8, 6),
+                 node_color='orangered', 
+                 colors=None, alpha=1.0, contour_alpha=0.25,
+                 size=300, edgecolors='w',
+                 edge_width=0.25, node_labels=None,
+                 font_size=12, legend_fontsize=12,
+                 node_shape='o', include_legend=True,
+                 with_labels=False, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = None
+
+    
+    X = X[..., dims]
+    X_sigma = X_sigma[..., dims, :][..., dims]
+    cmap = None
+    r = np.sqrt((X ** 2).sum(axis=1)).reshape(-1, 1)
+    if not isinstance(node_color, np.ndarray):
+        cmap = ListedColormap(
+            sns.light_palette(node_color, n_colors=np.unique(r).shape[0]))
+
+    G = nx.from_numpy_array(Y)
+    if node_labels is not None:
+        labels = {node_id : label for node_id, label in enumerate(node_labels)}
+    else:
+        labels = None
+
+    if z is None:
+        if not isinstance(node_color, np.ndarray):
+            node_color = np.asarray([node_color] * X.shape[0])
+    else:
+        encoder = LabelEncoder().fit(z)
+        if colors is None:
+            colors = get_colors(z.ravel())
+        node_color = colors[encoder.transform(z)]
+
+        # add a legend
+        for i in range(encoder.classes_.shape[0]):
+            ax.plot([0], [0], 'o', c=colors[i], label=encoder.classes_[i],
+                    markersize=10, markeredgecolor='w', zorder=0)
+        ax.plot([0], [0], 'o', markeredgecolor='w', c='w', zorder=0, markersize=10)
+
+    # draw latent position credible interval ellipses
+    if X_sigma is not None:
+        for i in range(X.shape[0]):
+            if isinstance(contour_alpha, np.ndarray):
+                calpha = contour_alpha[i]
+            else:
+                calpha = contour_alpha
+
+            normal_contour(X[i], X_sigma[i], edgecolor='gray',
+                           facecolor=node_color[i] if isinstance(node_color, np.ndarray) else 'gray',
+                           alpha=calpha, ax=ax, n_std=[2])
+
+    nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
+                     node_color=node_color,
+                     node_size=size,
+                     alpha=alpha,
+                     cmap=cmap,
+                     labels=labels,
+                     font_size=font_size,
+                     with_labels=with_labels,
+                     edgecolors=edgecolors,
+                     node_shape=node_shape,
+                     ax=ax)
+    #ax.scatter(X[:, 0], X[:, 1], marker='+', c='k', s=size)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+
+    if X_sigma is not None:
+        ax.collections[0].set_edgecolor(None)
+    else:
+        ax.collections[0].set_edgecolor('white')
+
+    ax.axis('equal')
+    #ax.axis('off')
+
+    if z is not None and include_legend:
+        ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2), ncol=6,
+                  fontsize=legend_fontsize)
+
+    return fig, ax

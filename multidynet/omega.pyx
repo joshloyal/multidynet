@@ -24,8 +24,6 @@ cdef double calculate_psi(double[::1] Xit,
                           double deltakj_sigma,
                           size_t n_features):
     cdef double psi_sq = 0.
-    cdef double c_omega = 0.
-    cdef double omega = 0.
     cdef int p, q = 0
 
     # calculate the natural parameter
@@ -45,6 +43,9 @@ cdef double calculate_psi(double[::1] Xit,
 
 
 cdef double update_omega_single(double psi_sq):
+    cdef double c_omega = 0.
+    cdef double omega = 0.
+    
     # calculate mean of a PG(1, sqrt(c_omega)) random variable
     c_omega = sqrt(psi_sq)
     omega = tanh(0.5 * c_omega)
