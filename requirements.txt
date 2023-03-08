@@ -1,3 +1,6 @@
-scipy>=0.13.3
-numpy>=1.8.2
-scikit-learn>=0.17
+scipy
+numpy
+scikit-learn
+cython
+tqdm
+networkx
