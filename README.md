@@ -100,4 +100,4 @@ plt.show()
 Simulation Studies and Real-Data Applications
 ---------------------------------------------
 
-This package includes the simulation studies and real-data applications found in the main article in the [scripts](scripts) directory.
+The [scripts](scripts) directory includes the simulation studies and real-data applications found in the main article.
