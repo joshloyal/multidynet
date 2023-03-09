@@ -173,7 +173,7 @@ def setup_package():
             package_data={
                 '': [
                     'multidynet' + os.path.sep + '*.pyx',
-                    'multidynet' + os.path.sep + '.pxd',
+                    'multidynet' + os.path.sep + '*.pxd',
                     'multidynet' + os.path.sep + 'multinet' + os.path.sep + '*.pyx',
                     'multidynet' + os.path.sep + 'multinet' + os.path.sep + '*.pxd'
                 ]

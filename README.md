@@ -15,8 +15,11 @@ Dependencies
 
 - Python (>= 3.10)
 
-and the requirements highlighted in [requirements.txt](requirements.txt)
+and the requirements highlighted in [requirements.txt](requirements.txt). To install the requirements, run
 
+```python
+pip install -r requirements.txt
+```
 
 Installation
 ------------
