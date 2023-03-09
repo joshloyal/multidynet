@@ -23,12 +23,12 @@ pip install -r requirements.txt
 
 Installation
 ------------
-You need a working installation of numpy, scipy, and Cython to install ``multidynet``. Install the required these dependencies before proceeding. The easiest way to install ``multidynet`` is using ``pip``. Use the following commands to get the copy from GitHub and install all the dependencies:
+You need a working installation of numpy, scipy, and Cython to install ``multidynet``. Install the required these dependencies before proceeding.  Use the following commands to get the copy from GitHub and install all the dependencies:
 
 ```
 git clone https://github.com/joshloyal/multidynet.git
 cd multidynet
-pip install .
+python setup.py install
 ```
 
 Example
