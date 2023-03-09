@@ -28,6 +28,7 @@ You need a working installation of numpy, scipy, and Cython to install ``multidy
 ```
 git clone https://github.com/joshloyal/multidynet.git
 cd multidynet
+pip install -r requirements.txt
 python setup.py install
 ```
 
