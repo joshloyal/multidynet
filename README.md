@@ -95,3 +95,9 @@ ax[1].set_title(time_labels[t])
 plt.show()
 ```
 <img src="images/icews_small_ls.png" width="100%" />
+
+
+Simulation Studies and Real-Data Applications
+---------------------------------------------
+
+This package includes the simulation studies and real-data applications found in the main article in the [scripts](scripts) directory.
