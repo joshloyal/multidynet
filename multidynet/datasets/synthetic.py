@@ -36,7 +36,7 @@ def multilayer_network_from_dynamic_latent_space(X, lmbda, delta,
 
             probas[k, t] = expit(eta)
 
-            Y[k, t] = rng.binomial(1, probas[k, t]).astype(np.int)
+            Y[k, t] = rng.binomial(1, probas[k, t]).astype(int)
 
             # make symmetric
             Y[k, t] = np.tril(Y[k, t], k=-1)
@@ -214,7 +214,7 @@ def network_from_dynamic_latent_space(X, delta, random_state=None):
         eta = np.add(deltat, deltat.T) + np.dot(X[t], X[t].T)
         probas[t] = expit(eta)
 
-        Y[t] = rng.binomial(1, probas[t]).astype(np.int)
+        Y[t] = rng.binomial(1, probas[t]).astype(int)
 
         # make symmetric
         Y[t] = np.tril(Y[t], k=-1)

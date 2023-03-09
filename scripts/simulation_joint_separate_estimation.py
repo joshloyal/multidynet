@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import pandas as pd
-import plac
 
 from os.path import join
 from multidynet import DynamicMultilayerNetworkLSM
