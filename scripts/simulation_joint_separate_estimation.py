@@ -4,7 +4,7 @@ import pandas as pd
 
 from os.path import join
 from multidynet import DynamicMultilayerNetworkLSM
-from multidynet.multinet.multinet import MultilayerNetworkLSM
+from multidynet import MultilayerNetworkLSM
 from multidynet.datasets import correlated_dynamic_multilayer_network
 from multidynet.model_selection import train_test_split
 from multidynet.metrics import calculate_correlation, calculate_auc
