@@ -112,13 +112,12 @@ def make_extension(ext_name, macros=[]):
     idx = mod_name.index('multidynet') + 1
     mod_name = '.'.join(mod_name[idx:])
     #mod_name = '.'.join(ext_name.split('.')[-2:])
-    print(mod_name)
     include_dirs = [numpy.get_include(), "."]
     if get_include():
         include_dirs = [get_include] + include_dirs
     return Extension(
         mod_name,
-        sources=[ext_path] + get_sources(),
+        sources=[os.path.relpath(ext_path)] + get_sources(),
         include_dirs=include_dirs,
         extra_compile_args=["-O3", "-Wall", "-fPIC"],
         define_macros=macros)
@@ -174,7 +173,9 @@ def setup_package():
             package_data={
                 '': [
                     'multidynet' + os.path.sep + '*.pyx',
-                    'multidynet' + os.path.sep + '.pxd'
+                    'multidynet' + os.path.sep + '.pxd',
+                    'multidynet' + os.path.sep + 'multinet' + os.path.sep + '*.pyx',
+                    'multidynet' + os.path.sep + 'multinet' + os.path.sep + '*.pxd'
                 ]
             },
             include_package_data=True,
