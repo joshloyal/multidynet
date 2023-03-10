@@ -67,7 +67,7 @@ k = 0
 t = 0
 plot_latent_space(Y[k, t], model.Z_[t], X_sigma=model.Z_sigma_[t],
                    with_labels=True, font_size=10,
-                   contour_alpha=0.1,
+                   contour_alpha=0.1, n_std=1,
                    size=0, edge_width=0,
                    node_labels=countries,
                    ax=ax[0])
@@ -82,7 +82,7 @@ k = 0
 t = 11
 plot_latent_space(Y[k, t], model.Z_[t], X_sigma=model.Z_sigma_[t],
                    with_labels=True, font_size=10,
-                   contour_alpha=0.1,
+                   contour_alpha=0.1, n_std=1,
                    size=0, edge_width=0,
                    node_labels=countries,
                    ax=ax[1])

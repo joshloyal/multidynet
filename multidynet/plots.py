@@ -809,6 +809,7 @@ def plot_latent_space(Y, X, X_sigma=None, dims=[0, 1],
                  size=300, edgecolors='w',
                  edge_width=0.25, node_labels=None,
                  font_size=12, legend_fontsize=12,
+                 n_std=2,
                  node_shape='o', include_legend=True,
                  with_labels=False, ax=None):
     if ax is None:
@@ -856,7 +857,7 @@ def plot_latent_space(Y, X, X_sigma=None, dims=[0, 1],
 
             normal_contour(X[i], X_sigma[i], edgecolor='gray',
                            facecolor=node_color[i] if isinstance(node_color, np.ndarray) else 'gray',
-                           alpha=calpha, ax=ax, n_std=[2])
+                           alpha=calpha, ax=ax, n_std=[n_std])
 
     nx.draw_networkx(G, X, edge_color='gray', width=edge_width,
                      node_color=node_color,
