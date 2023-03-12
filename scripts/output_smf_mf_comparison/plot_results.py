@@ -16,7 +16,7 @@ fig, ax = plt.subplots(
 for i, rho in enumerate(rhos):
     for j, sigma in enumerate(sigmas):
         data = []
-        for file_name in glob.glob(f'output/sigma_{sigma}_rho_{rho}/results_curves*'):
+        for file_name in glob.glob(f'sigma_{sigma}_rho_{rho}/results_curves*'):
             df = pd.read_csv(file_name)
             df['sigma'] = sigma
             df['rho'] = rho
